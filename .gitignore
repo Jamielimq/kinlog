@@ -41,3 +41,8 @@ app-example
 # generated native folders
 /ios
 /android
+!/android/app/src/main/java/com/kinlog/app/PoseLandmarkerModule.kt
+!/android/app/src/main/java/com/kinlog/app/PoseLandmarkerPackage.kt
+!/android/app/src/main/java/com/kinlog/app/MainApplication.kt
+!/android/app/src/main/assets/pose_landmarker_lite.task
+!/android/app/build.gradle

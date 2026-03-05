@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "406628573829",
+    "project_id": "kinlog-6549a",
+    "storage_bucket": "kinlog-6549a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:406628573829:android:8d970c1e76efdcf2a63fec",
+        "android_client_info": {
+          "package_name": "com.kinlog.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZlRMuc86Z1Gzw4-JMLwccVMDl9K3fO80"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

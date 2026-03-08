@@ -138,6 +138,7 @@ The body doesn't lie.
 We built Kinlog because we believe the world is better when people move. 
 When habits are formed. When effort is owned. 
 We hope this app becomes a small part of someone's daily life, and brings them a little more joy, consistency, and pride in showing up for themselves.
+
 ---
 
 ## Privacy & Legal

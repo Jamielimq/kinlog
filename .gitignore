@@ -46,3 +46,4 @@ app-example
 !/android/app/src/main/java/com/kinlog/app/MainApplication.kt
 !/android/app/src/main/assets/pose_landmarker_lite.task
 !/android/app/build.gradle
+google-services.json

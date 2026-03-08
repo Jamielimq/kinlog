@@ -107,6 +107,16 @@ For the first time, years of clinical knowledge became a single algorithm
 5. Hit 30 reps to complete your daily goal
 6. Earn points, build streaks, mint NFT badges as permanent proof
 
+## Screenshots
+
+| Home | Workout | Badges |
+|------|---------|--------|
+| ![Home](./assets/screenshots/Kinlog-screenshot3.png) | ![Workout](./assets/screenshots/Kinlog-screenshot4.png) | ![Badges](./assets/screenshots/Kinlog-screenshot2.png) |
+
+| Goals | Profile |
+|-------|---------|
+| ![Goals](./assets/screenshots/Kinlog-screenshot1.png) | ![Profile](./assets/screenshots/Kinlog-screenshot5.png) |
+
 ---
 
 ## NFT Badges

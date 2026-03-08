@@ -32,6 +32,20 @@ export function useGoals(address: string | null) {
     const db = getFirestore(getApp());
     const goalsRef = collection(db, 'users', address, 'goals');
 
+    const init = async () => {
+      // Reset daily goal if it's a new day
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayTs = todayStart.getTime();
+      const dailyRef = doc(db, 'users', address, 'goals', 'daily');
+      const dailySnap = await dailyRef.get();
+      const lastReset = dailySnap.data()?.lastResetDate ?? 0;
+      if (lastReset < todayTs) {
+        await setDoc(dailyRef, { current: 0, lastResetDate: todayTs }, { merge: true });
+      }
+    };
+    init();
+
     const unsubscribe = onSnapshot(goalsRef, async snapshot => {
       if (snapshot.empty) {
         // Initialize default goals

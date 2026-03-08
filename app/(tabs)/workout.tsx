@@ -24,7 +24,7 @@ function getTodayStart() {
   const d = new Date(); d.setHours(0,0,0,0); return d.getTime()
 }
 function getWeekStart() {
-  const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - d.getDay()); return d.getTime()
+  const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime()
 }
 function getMonthStart() {
   const d = new Date(); d.setHours(0,0,0,0); d.setDate(1); return d.getTime()

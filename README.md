@@ -9,17 +9,17 @@ Built for the MONOLITH Solana Mobile Hackathon 2026 by a Physical Therapist & At
 
 **What does it mean to be human in the age of AI?**
 
-I'm a physical therapist and athletic trainer. Every day, I evaluate how people move — or more accurately, how people have stopped moving.
+I'm a physical therapist and athletic trainer. Every day, I evaluate how people move, how they act, how they function, how they live.
 
 The population is aging faster. Desk jobs are multiplying. The average person now sits for over 10 hours a day. Everyone knows they should exercise. Most don't know if they're doing it right. And ironically, as AI gets smarter, humans have even less reason to use their bodies.
 
-We outsource our thinking to AI. We outsource our creativity to AI. We outsource our memory to AI.
+We outsource our thinking to AI. We outsource our memory to AI.
 
 But there's one thing AI cannot do for you.
 
 **It cannot sweat for you. It cannot endure for you. It cannot get back up for you.**
 
-The more AI advances, the more physical movement becomes a distinctly human act. Thinking, judging, creating — AI can do those things. But the burn in your legs on rep 28. The decision to do rep 29. The moment you stand up on rep 30.
+The more AI advances, the more physical movement becomes a distinctly human act. Thinking, judging, creating, AI can do those things. But the moment you decide to do one more rep when your legs are burning. The moment you stand back up. That is still yours. That will always be yours.
 
 That's still yours. That will always be yours.
 
@@ -27,17 +27,14 @@ That's still yours. That will always be yours.
 
 ## Why Web3?
 
-Web3 is built on a simple idea: **you own what is yours.**
+Web3 is built on ownership. 
+You own your wallet, your assets, your history. 
+But what about your body?  
+Your fitness history belongs to a corporation. Your achievements disappear when the app does. 
 
-Your wallet. Your assets. Your history. Not a company's server. Not a platform that can disappear. Yours.
+Kinlog puts that on-chain. Your effort, permanently yours.
 
-But we've never applied that to the most fundamental thing we have — **our bodies.**
-
-Your workout data lives on some app's server. Your fitness history belongs to a corporation. Your achievements exist only as long as the company does.
-
-Kinlog changes that.
-
-Every squat you complete is recorded on Solana — permanently, immutably, owned by you. Not as a number in a database. As an on-chain proof of effort. An NFT badge that no one can take away.
+Every exercise you complete is recorded on Solana, permanently, immutably, owned by you. Not as a number in a database. As an on-chain proof of effort. An NFT badge that no one can take away.
 
 **Because the most human thing you do deserves to be owned by you.**
 
@@ -51,13 +48,14 @@ Kinlog is a fitness dApp that uses AI-powered motion recognition to count squat 
 
 Complete your daily 30-squat goal. Build streaks. Earn NFT badges on Solana Mainnet. Own your fitness history forever.
 
-Built by a licensed Physical Therapist who got tired of watching people move less and less — and decided to do something about it.
+Built by a licensed Physical Therapist who got tired of watching people move less and less.
+I decided to do something about it.
 
 ---
 
 ## The Algorithm Came From the Clinic
 
-The squat detection isn't arbitrary. It came from years of clinical work.
+The squat detection isn't arbitrary.
 
 MediaPipe's AI tracks 33 joint landmarks in real time. Kinlog uses three: **hip, knee, ankle.**
 
@@ -67,7 +65,10 @@ MediaPipe's AI tracks 33 joint landmarks in real time. Kinlog uses three: **hip,
 
 Why these numbers? Too shallow and there's no training effect. Too deep and you stress the knee cartilage. These thresholds come from years of working with athletes and patients — from a physical therapist who has watched thousands of squats.
 
-For the first time, a decade of clinical knowledge became a single algorithm.
+but, These thresholds were set with one priority in mind: making movement accessible. 
+The goal is habit formation, not perfection. 
+Low enough to be effective, forgiving enough to keep you coming back.
+For the first time, years of clinical knowledge became a single algorithm
 
 ---
 
@@ -123,14 +124,20 @@ For the first time, a decade of clinical knowledge became a single algorithm.
 
 ## The Build
 
-This app was built solo by a non-developer — a physical therapist learning to code with AI.
+This app was built solo by a physical therapist. Not a developer. 
+Someone who spent more time studying the human body than writing code.
 
-There were moments of real difficulty. Days of native Kotlin work disappeared with a single command. The Solana wallet integration required understanding cryptographic transaction signing from scratch. MediaPipe on React Native had no existing references.
+With a little help from AI (Claude), the gap between knowledge and creation disappeared. 
+What mattered was having something worth building.
 
-Every obstacle felt like a patient in rehabilitation. You assess, you plan, you rebuild.
+Movement is the most honest thing a person can do. 
+You cannot fake Exercise. 
+You cannot cheat a streak. 
+The body doesn't lie.
 
-That's what development is. That's what rehabilitation is. They're the same thing.
-
+We built Kinlog because we believe the world is better when people move. 
+When habits are formed. When effort is owned. 
+We hope this app becomes a small part of someone's daily life, and brings them a little more joy, consistency, and pride in showing up for themselves.
 ---
 
 ## Privacy & Legal
@@ -145,5 +152,3 @@ That's what development is. That's what rehabilitation is. They're the same thin
 **Jamie Lim**
 Licensed Physical Therapist & Certified Athletic Trainer
 Built solo for the MONOLITH Solana Mobile Hackathon 2026
-
-*"Movement is the original proof of work."*

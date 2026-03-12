@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Privacy Policy – Kinlog</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #1e1e1e;
+      --amber: #f5a623;
+      --amber-dim: #c47e10;
+      --text: #e8e0d0;
+      --muted: #888;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+    .noise {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      opacity: 0.4;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(10,10,10,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 40px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .logo-mark {
+      width: 32px; height: 32px;
+      background: var(--amber);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px; font-weight: 700;
+      color: #0a0a0a;
+    }
+    .logo-text {
+      font-size: 18px; font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
+    .logo-text span { color: var(--amber); }
+    .badge {
+      margin-left: auto;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      color: var(--amber-dim);
+      border: 1px solid var(--amber-dim);
+      padding: 3px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.12em;
+    }
+    main {
+      position: relative; z-index: 1;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 60px 40px 100px;
+    }
+    .page-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--amber);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 42px;
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      font-family: 'Space Mono', monospace;
+      margin-bottom: 56px;
+    }
+    .divider {
+      width: 48px; height: 2px;
+      background: var(--amber);
+      margin-bottom: 56px;
+    }
+    section {
+      margin-bottom: 48px;
+      padding: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    section::before {
+      content: '';
+      position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--amber);
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--amber);
+      margin-bottom: 14px;
+      letter-spacing: 0.02em;
+    }
+    p { color: #c8c0b0; font-size: 15px; margin-bottom: 12px; }
+    p:last-child { margin-bottom: 0; }
+    ul {
+      list-style: none;
+      margin: 10px 0;
+    }
+    ul li {
+      color: #c8c0b0;
+      font-size: 15px;
+      padding: 5px 0 5px 20px;
+      position: relative;
+    }
+    ul li::before {
+      content: '▸';
+      color: var(--amber);
+      position: absolute; left: 0;
+      font-size: 11px; top: 7px;
+    }
+    a { color: var(--amber); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    footer {
+      text-align: center;
+      padding: 32px 40px;
+      border-top: 1px solid var(--border);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      position: relative; z-index: 1;
+    }
+  </style>
+</head>
+<body>
+<div class="noise"></div>
+<header>
+  <div class="logo-mark">K</div>
+  <span class="logo-text">KIN<span>LOG</span></span>
+  <span class="badge">LEGAL</span>
+</header>
+
+<main>
+  <div class="page-tag">// legal</div>
+  <h1>Privacy Policy</h1>
+  <div class="subtitle">Last updated: March 2026 &nbsp;·&nbsp; Effective immediately</div>
+  <div class="divider"></div>
+
+  <section>
+    <h2>1. Introduction</h2>
+    <p>Kinlog ("we", "our", or "the app") is a fitness tracking application built on the Solana blockchain. This Privacy Policy explains how we collect, use, and protect your information when you use Kinlog on Android (Solana Seeker).</p>
+    <p>By using Kinlog, you agree to the practices described in this policy.</p>
+  </section>
+
+  <section>
+    <h2>2. Information We Collect</h2>
+    <p><strong style="color:var(--text)">Camera Access</strong><br/>Kinlog uses your device camera solely for real-time pose detection to count squat repetitions. <strong style="color:var(--amber)">No video is recorded, stored, or transmitted.</strong> All pose analysis occurs locally on your device using MediaPipe.</p>
+    <p><strong style="color:var(--text)">Workout Data</strong><br/>We store the following data in Firebase Firestore:</p>
+    <ul>
+      <li>Total squat counts and workout history</li>
+      <li>Daily and weekly fitness goals and progress</li>
+      <li>Streak counts and points balance</li>
+      <li>NFT badge achievement records</li>
+    </ul>
+    <p><strong style="color:var(--text)">Wallet Address</strong><br/>When you connect a Solana wallet to mint NFT badges, your public wallet address is used solely for on-chain transactions. We never access your private keys or seed phrase.</p>
+  </section>
+
+  <section>
+    <h2>3. How We Use Your Data</h2>
+    <ul>
+      <li>Display your personal fitness progress and history</li>
+      <li>Track daily goals, streaks, and achievements</li>
+      <li>Mint NFT badges to your Solana wallet upon achieving milestones</li>
+      <li>Improve app performance and functionality</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>4. Data Sharing</h2>
+    <p>We do not sell, rent, or share your personal data with third parties. Your workout data is stored in Firebase Firestore (Google) and is used solely to provide app functionality. NFT minting transactions are recorded on the Solana public blockchain by nature of the technology.</p>
+  </section>
+
+  <section>
+    <h2>5. Data Retention & Deletion</h2>
+    <p>Your workout data is retained as long as you use the app. You may request deletion of your data at any time by contacting us. On-chain NFT records on the Solana blockchain cannot be deleted due to the immutable nature of blockchain technology.</p>
+  </section>
+
+  <section>
+    <h2>6. Security</h2>
+    <p>We use industry-standard security measures including Firebase security rules and HTTPS encryption. Camera data is never stored or transmitted — all processing occurs on-device in real time.</p>
+  </section>
+
+  <section>
+    <h2>7. Children's Privacy</h2>
+    <p>Kinlog is not directed to children under 13. We do not knowingly collect personal information from children. If you believe a child has provided us with personal information, please contact us.</p>
+  </section>
+
+  <section>
+    <h2>8. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. Updates will be posted on this page with a revised effective date. Continued use of Kinlog after changes constitutes acceptance of the updated policy.</p>
+  </section>
+
+  <section>
+    <h2>9. Contact</h2>
+    <p>For questions or requests regarding this Privacy Policy, please contact:</p>
+    <p><a href="mailto:jamielimq@gmail.com">jamielimq@gmail.com</a></p>
+  </section>
+</main>
+
+<foot

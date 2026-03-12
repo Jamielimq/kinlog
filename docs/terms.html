@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Terms & Conditions – Kinlog</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --border: #1e1e1e;
+      --amber: #f5a623;
+      --amber-dim: #c47e10;
+      --text: #e8e0d0;
+      --muted: #888;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+    .noise {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      opacity: 0.4;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(10,10,10,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 40px;
+      display: flex; align-items: center; gap: 14px;
+    }
+    .logo-mark {
+      width: 32px; height: 32px;
+      background: var(--amber);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px; font-weight: 700;
+      color: #0a0a0a;
+    }
+    .logo-text {
+      font-size: 18px; font-weight: 800;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
+    .logo-text span { color: var(--amber); }
+    .badge {
+      margin-left: auto;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      color: var(--amber-dim);
+      border: 1px solid var(--amber-dim);
+      padding: 3px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.12em;
+    }
+    main {
+      position: relative; z-index: 1;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 60px 40px 100px;
+    }
+    .page-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--amber);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 42px;
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      font-family: 'Space Mono', monospace;
+      margin-bottom: 56px;
+    }
+    .divider {
+      width: 48px; height: 2px;
+      background: var(--amber);
+      margin-bottom: 56px;
+    }
+    section {
+      margin-bottom: 48px;
+      padding: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    section::before {
+      content: '';
+      position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--amber);
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--amber);
+      margin-bottom: 14px;
+      letter-spacing: 0.02em;
+    }
+    p { color: #c8c0b0; font-size: 15px; margin-bottom: 12px; }
+    p:last-child { margin-bottom: 0; }
+    ul {
+      list-style: none;
+      margin: 10px 0;
+    }
+    ul li {
+      color: #c8c0b0;
+      font-size: 15px;
+      padding: 5px 0 5px 20px;
+      position: relative;
+    }
+    ul li::before {
+      content: '▸';
+      color: var(--amber);
+      position: absolute; left: 0;
+      font-size: 11px; top: 7px;
+    }
+    a { color: var(--amber); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .warning {
+      background: rgba(245,166,35,0.06);
+      border: 1px solid rgba(245,166,35,0.2);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-top: 12px;
+      font-size: 14px;
+      color: #c8c0b0;
+    }
+    footer {
+      text-align: center;
+      padding: 32px 40px;
+      border-top: 1px solid var(--border);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      position: relative; z-index: 1;
+    }
+  </style>
+</head>
+<body>
+<div class="noise"></div>
+<header>
+  <div class="logo-mark">K</div>
+  <span class="logo-text">KIN<span>LOG</span></span>
+  <span class="badge">LEGAL</span>
+</header>
+
+<main>
+  <div class="page-tag">// legal</div>
+  <h1>Terms &amp; Conditions</h1>
+  <div class="subtitle">Last updated: March 2026 &nbsp;·&nbsp; Effective immediately</div>
+  <div class="divider"></div>
+
+  <section>
+    <h2>1. Acceptance of Terms</h2>
+    <p>By downloading, installing, or using Kinlog ("the App"), you agree to be bound by these Terms and Conditions. If you do not agree, please do not use the App.</p>
+  </section>
+
+  <section>
+    <h2>2. Description of Service</h2>
+    <p>Kinlog is a fitness tracking application that uses AI-powered pose detection to count squat repetitions, track workout progress, and reward users with NFT badges on the Solana blockchain. The App is designed for use on Solana Seeker (Android) devices.</p>
+  </section>
+
+  <section>
+    <h2>3. User Responsibilities</h2>
+    <p>You are responsible for:</p>
+    <ul>
+      <li>Using the App in a safe physical environment with adequate space</li>
+      <li>Ensuring you are physically fit to perform squat exercises</li>
+      <li>Consulting a healthcare professional before beginning any exercise program</li>
+      <li>Securing your own Solana wallet and private keys</li>
+      <li>All transactions made from your connected wallet</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>4. Health & Fitness Disclaimer</h2>
+    <div class="warning">
+      ⚠️ Kinlog is not a medical device and does not provide medical advice. The pose detection and rep counting features are for informational and motivational purposes only. Always consult a qualified healthcare or fitness professional before starting a new exercise routine.
+    </div>
+    <p style="margin-top:14px">Kinlog and its developer are not liable for any injury, health issue, or physical harm arising from use of the App.</p>
+  </section>
+
+  <section>
+    <h2>5. Blockchain & NFT Terms</h2>
+    <p>Kinlog enables minting of NFT badges on the Solana blockchain. By using this feature, you acknowledge:</p>
+    <ul>
+      <li>Blockchain transactions are irreversible once confirmed</li>
+      <li>NFT badges are digital collectibles with no guaranteed monetary value</li>
+      <li>You are solely responsible for any transaction fees (gas fees) incurred</li>
+      <li>Kinlog does not control the Solana network and is not liable for network outages, congestion, or failed transactions</li>
+      <li>Your public wallet address will be recorded on the public blockchain</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>6. Intellectual Property</h2>
+    <p>All content within Kinlog — including but not limited to the app design, graphics, code, and NFT badge artwork — is the property of Kinlog's developer. You may not reproduce, distribute, or create derivative works without express written permission.</p>
+  </section>
+
+  <section>
+    <h2>7. Limitation of Liability</h2>
+    <p>Kinlog is provided "as is" without warranties of any kind. To the maximum extent permitted by law, the developer shall not be liable for any indirect, incidental, or consequential damages arising from your use of the App, including data loss, physical injury, or financial loss related to blockchain transactions.</p>
+  </section>
+
+  <section>
+    <h2>8. Privacy</h2>
+    <p>Your use of Kinlog is also governed by our <a href="privacy-policy.html">Privacy Policy</a>, which is incorporated into these Terms by reference.</p>
+  </section>
+
+  <section>
+    <h2>9. Modifications</h2>
+    <p>We reserve the right to modify these Terms at any time. Updated Terms will be posted on this page. Continued use of the App after modifications constitutes acceptance of the revised Terms.</p>
+  </section>
+
+  <section>
+    <h2>10. Contact</h2>
+    <p>For questions regarding these Terms, please contact:</p>
+    <p><a href="mailto:jamielimq@gmail.com">jamielimq@gmail.com</a></p>
+  </section>
+</main>
+
+<footer>
+ 

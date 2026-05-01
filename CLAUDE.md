@@ -75,7 +75,7 @@ This function bundles a lot of game logic; read it before changing related code.
 ### SKR staking detection (`hooks/useSkrStaking.ts`)
 Detects whether the user has ≥1 SKR staked, which auto-awards the `skr_staker` badge. Three-tier lookup: Firestore cache → Helius transaction history → `getProgramAccounts`. Reads raw account bytes at fixed offsets (`offset: 41` for owner memcmp, `137` for sharePrice, `104` for shares, `dataSize: 169`). **This is tightly coupled to the SKR program's account layout** — if SKR upgrades the layout this breaks silently.
 
-The Helius API key is hardcoded in this file.
+The Helius API key is read from `process.env.EXPO_PUBLIC_HELIUS_API_KEY` (Expo inlines `EXPO_PUBLIC_*` vars at bundle time). See `.env.example` for the variable name; the real key lives in a gitignored `.env`. If the env var is missing, the hook's `check()` throws inside its existing `try`/`catch`, which logs `SKR check error: ...` and sets `isStaker(false)` — the badges tab and the rest of the app keep working; only the `skr_staker` badge fails to auto-award. Don't move the throw to module scope; that would crash anything that imports this hook.
 
 ## Conventions
 

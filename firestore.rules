@@ -1,0 +1,108 @@
+rules_version = '2';
+
+// X2 protection model:
+// - challenges/* is read-only (admin-seeded, no client writes)
+// - users/{wallet}/userChallenges/* is strictly validated (schema, state machine, bonus integrity)
+// - Other user subcollections are loosely permitted (wallet format check only)
+// - Self-only-read and points-write blocking are deferred to Phase 2 (requires Firebase Custom Token Auth)
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== Helpers =====
+
+    function isValidWallet(addr) {
+      return addr is string && addr.matches('^[1-9A-HJ-NP-Za-km-z]{32,44}$');
+    }
+
+    function unchanged(field) {
+      return request.resource.data[field] == resource.data[field];
+    }
+
+    // active is the only mutable state.
+    // completed -> claimed is the single one-shot transition.
+    // claimed and failed are terminal (no further updates allowed).
+    function statusTransitionAllowed() {
+      let oldStatus = resource.data.status;
+      let newStatus = request.resource.data.status;
+      return (oldStatus == 'active'
+                && (newStatus == 'active' || newStatus == 'completed' || newStatus == 'failed'))
+          || (oldStatus == 'completed'
+                && (newStatus == 'completed' || newStatus == 'claimed'));
+    }
+
+    function claimedTransitionValid(challengeId) {
+      return request.resource.data.bonusPointsAwarded ==
+               get(/databases/$(database)/documents/challenges/$(challengeId)).data.bonusPoints
+          && request.resource.data.claimTxSignature is string;
+    }
+
+    // ===== Global challenge catalog (read-only) =====
+
+    match /challenges/{challengeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ===== User documents =====
+
+    match /users/{wallet} {
+      allow read, write: if isValidWallet(wallet);
+
+      match /badges/{badgeId}        { allow read, write: if isValidWallet(wallet); }
+      match /goals/{goalId}          { allow read, write: if isValidWallet(wallet); }
+      match /workouts/{workoutId}    { allow read, write: if isValidWallet(wallet); }
+      match /points_history/{histId} { allow read, write: if isValidWallet(wallet); }
+      match /cache/{cacheId}         { allow read, write: if isValidWallet(wallet); }
+
+      // Strictly protected: challenge instances
+      match /userChallenges/{instanceId} {
+        allow read: if isValidWallet(wallet);
+
+        allow create: if isValidWallet(wallet)
+          && request.resource.data.keys().hasAll([
+               'challengeId', 'status', 'sequence', 'startedAt',
+               'startTxSignature', 'startMemo', 'requirementSnapshot', 'progress'
+             ])
+          && request.resource.data.status == 'active'
+          && request.resource.data.challengeId is string
+          && exists(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId))
+          && request.resource.data.sequence is int
+          && request.resource.data.sequence > 0
+          && request.resource.data.startedAt is int
+          && request.resource.data.startedAt > 0
+          && request.resource.data.startTxSignature is string
+          && request.resource.data.startMemo is string
+          && request.resource.data.requirementSnapshot is map
+          && request.resource.data.progress is map;
+
+        allow update: if isValidWallet(wallet)
+          && unchanged('challengeId')
+          && unchanged('sequence')
+          && unchanged('startedAt')
+          && unchanged('startTxSignature')
+          && unchanged('startMemo')
+          && unchanged('requirementSnapshot')
+          && statusTransitionAllowed()
+          && (
+               request.resource.data.status != 'claimed'
+               || claimedTransitionValid(resource.data.challengeId)
+             );
+
+        allow delete: if false;
+      }
+    }
+
+    // ===== Explicitly closed paths =====
+
+    // useLeaderboard.ts is dead code; deny access until it's removed or wired up.
+    match /leaderboard/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Default deny for any other path (no rule grants -> denied).
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

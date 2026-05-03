@@ -14,9 +14,10 @@ const C = {
 }
 
 function getActivityIcon(reason: string) {
-  if (reason.toLowerCase().includes('minted') || reason.toLowerCase().includes('nft')) return '✦'
-  if (reason.toLowerCase().includes('streak')) return '🔥'
-  if (reason.toLowerCase().includes('badge')) return '🏅'
+  const r = reason.toLowerCase()
+  if (r.includes('claimed') || r.includes('minted') || r.includes('nft')) return '✦'
+  if (r.includes('streak')) return '🔥'
+  if (r.includes('badge')) return '🏅'
   return '🏋️'
 }
 
@@ -35,12 +36,12 @@ export default function ProfileScreen() {
   const STATS = [
     { label: 'Total Points',   value: formattedPoints,        color: C.amber  },
     { label: 'Total Workouts', value: `${stats.totalWorkouts}`, color: C.dark2 },
-    { label: 'NFT Badges',     value: `${mintedBadges}`,       color: C.dark2 },
+    { label: 'Achievements',   value: `${mintedBadges}`,       color: C.dark2 },
     { label: 'Best Streak',    value: `${stats.bestStreak}d`,  color: C.dark2 },
   ]
 
   // workout 기록만 필터 (squats completed)
-  const workoutHistory = history.filter(h => h.reason.toLowerCase().includes('squat'))
+  const workoutHistory = history.filter(h => h.reason.toLowerCase().includes('completed'))
   // 포인트 전체 기록
   const pointsHistory = history
 
@@ -207,7 +208,7 @@ export default function ProfileScreen() {
             <View style={s.modalHandle}/>
             <Text style={s.modalTitle}>Disconnect Wallet?</Text>
             <Text style={s.modalAddr}>{shortAddress}</Text>
-            <Text style={s.modalDesc}>Disconnecting your wallet will disable points earning and NFT badge features.</Text>
+            <Text style={s.modalDesc}>Disconnecting your wallet will disable points earning and on-chain achievement records.</Text>
             <TouchableOpacity style={s.modalDisconnect} onPress={() => { disconnect(); setShowDisconnect(false) }}>
               <Text style={s.modalDisconnectText}>Disconnect</Text>
             </TouchableOpacity>

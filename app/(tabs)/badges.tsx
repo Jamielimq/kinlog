@@ -1,12 +1,12 @@
 import { getApp } from '@react-native-firebase/app'
 import { doc, getFirestore, setDoc } from '@react-native-firebase/firestore'
-import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js'
 import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl } from '@solana/web3.js'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useWallet } from '../../context/WalletContext'
 import { useBadges } from '../../hooks/useBadges'
+import { useSkrStaking } from '../../hooks/useSkrStaking'
 
 const C = {
   bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
@@ -19,12 +19,7 @@ const RARITY_COLOR: Record<string, string> = {
   Common: '#78716C', Uncommon: '#0EA5E9', Rare: '#F59E0B', Epic: '#A855F7', Legendary: '#EF4444',
 }
 
-const TABS = [
-  { key: 'all',     label: 'All'     },
-  { key: 'squats',  label: 'Squats'  },
-  { key: 'streak',  label: 'Streak'  },
-  { key: 'special', label: 'Special' },
-]
+
 
 // Treasury wallet that receives mint fees
 const TREASURY_WALLET = new PublicKey('EyEohuV8fBXyNDZK9ZtYFNe6A6FfUw9ndSwBbtNqTxmJ')
@@ -37,9 +32,41 @@ export default function BadgesScreen() {
   const [showDisconnect, setShowDisconnect] = useState(false)
   const [activeTab, setActiveTab] = useState('all')
   const [minting, setMinting] = useState<string | null>(null)
-  const [mintSuccess, setMintSuccess] = useState<{ badgeName: string; tx: string } | null>(null)
+  const { isStaker } = useSkrStaking(address)
 
-  const filtered = activeTab === 'all' ? badges : badges.filter(b => b.category === activeTab)
+  // Auto-award SKR Staker badge
+  useEffect(() => {
+    if (isStaker && address) {
+      const db = getFirestore(getApp())
+      setDoc(
+        doc(db, 'users', address, 'badges', 'skr_staker'),
+        { earned: true, earnedAt: Date.now() },
+        { merge: true }
+      )
+    }
+  }, [isStaker, address])
+  const [mintSuccess, setMintSuccess] = useState<{ badgeName: string; tx: string; points: number } | null>(null)
+
+  const hasMintable = (cat?: string) => badges.some(b => b.earned && !b.mintedAt && (cat ? b.category === cat : true))
+  const TABS = [
+    { key: 'all',     label: `All (${badges.length})`,    dot: hasMintable()          },
+    { key: 'squats',  label: `Squats (${badges.filter(b => b.category === 'squats').length})`,  dot: hasMintable('squats')  },
+    { key: 'streak',  label: `Streak (${badges.filter(b => b.category === 'streak').length})`,  dot: hasMintable('streak')  },
+    { key: 'special', label: `Special (${badges.filter(b => b.category === 'special').length})`, dot: hasMintable('special') },
+  ]
+  const categoryOrder = { squats: 0, streak: 1, special: 2 }
+  const getSortRank = (b: any) => {
+    if (b.earned && b.mintedAt) return 0   // Minted
+    if (b.earned && !b.mintedAt) return 1  // Mintable
+    return 2                                // Locked
+  }
+  const filtered = activeTab === 'all'
+    ? [...badges].sort((a, b) => {
+        const rankDiff = getSortRank(a) - getSortRank(b)
+        if (rankDiff !== 0) return rankDiff
+        return (categoryOrder[a.category] ?? 9) - (categoryOrder[b.category] ?? 9)
+      })
+    : badges.filter(b => b.category === activeTab)
   const earned = badges.filter(b => b.earned).length
   const total  = badges.length
 
@@ -50,13 +77,7 @@ export default function BadgesScreen() {
       const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed')
       let txSignature = ''
 
-      await transact(async (wallet) => {
-        // Authorize wallet
-        const authResult = await wallet.authorize({
-          cluster: 'mainnet-beta',
-          identity: { name: 'Kinlog', uri: 'https://kinlog.app', icon: '/favicon.ico' },
-        })
-
+      await authorizeAndSign(async (wallet, authToken) => {
         // Build transfer transaction
         const { blockhash } = await connection.getLatestBlockhash()
         const tx = new Transaction()
@@ -95,17 +116,17 @@ export default function BadgesScreen() {
         await setDoc(doc(db, 'users', address), { points: fsIncrement(mintPts), updatedAt: now }, { merge: true })
         await (await import('@react-native-firebase/firestore')).addDoc(
           (await import('@react-native-firebase/firestore')).collection(db, 'users', address, 'points_history'),
-          { reason: `Minted NFT: ${mintedBadgeData?.name}`, amount: mintPts, createdAt: now }
+          { reason: `Claimed badge: ${mintedBadgeData?.name}`, amount: mintPts, createdAt: now }
         )
       }
 
       const mintedBadge = badges.find(b => b.id === badgeId)
-      setMintSuccess({ badgeName: mintedBadge?.name ?? badgeId, tx: txSignature })
+      setMintSuccess({ badgeName: mintedBadge?.name ?? badgeId, tx: txSignature, points: mintPts })
     } catch (e: any) {
       // Ignore user cancellation
       if (!e?.message?.includes('CancellationException') && !e?.message?.includes('cancelled')) {
         console.error('Mint error:', e)
-        Alert.alert('Mint Failed', e?.message ?? 'Transaction failed. Please try again.')
+        Alert.alert('Claim Failed', e?.message ?? 'Transaction failed. Please try again.')
       }
     } finally {
       setMinting(null)
@@ -120,7 +141,7 @@ export default function BadgesScreen() {
         <View style={s.header}>
           <View>
             <Text style={s.headerSub}>Collection</Text>
-            <Text style={s.headerTitle}>My NFT Badges</Text>
+            <Text style={s.headerTitle}>My Badge Collection</Text>
           </View>
           {publicKey ? (
             <TouchableOpacity style={s.walletConnected} onPress={() => setShowDisconnect(true)}>
@@ -157,7 +178,7 @@ export default function BadgesScreen() {
           <View style={[s.walletIndicator, { backgroundColor: publicKey ? C.amber2 : '#EF4444' }]}/>
           <View style={{ flex: 1 }}>
             <Text style={s.walletTitle}>{publicKey ? 'Solana Wallet Connected' : 'Wallet Not Connected'}</Text>
-            <Text style={s.walletAddr}>{shortAddress ?? 'Connect to mint NFT badges'}</Text>
+            <Text style={s.walletAddr}>{shortAddress ?? 'Connect to claim achievement points'}</Text>
           </View>
           <View style={s.walletBadge}>
             <Text style={s.walletBadgeText}>{publicKey ? 'Active' : 'Connect'}</Text>
@@ -173,7 +194,10 @@ export default function BadgesScreen() {
               onPress={() => setActiveTab(tab.key)}
               activeOpacity={0.8}
             >
-              <Text style={[s.tabText, activeTab === tab.key && s.tabTextActive]}>{tab.label}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={[s.tabText, activeTab === tab.key && s.tabTextActive]}>{tab.label}</Text>
+                {tab.dot && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }}/>}
+              </View>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -209,13 +233,13 @@ export default function BadgesScreen() {
                   activeOpacity={0.8}
                 >
                   <Text style={s.mintBtnText}>
-                    {minting === b.id ? 'Minting...' : 'Mint NFT'}
+                    {minting === b.id ? 'Claiming...' : 'Claim Points'}
                   </Text>
                 </TouchableOpacity>
               )}
               {b.mintedAt && (
                 <View style={s.mintedTag}>
-                  <Text style={s.mintedTagText}>✦ Minted</Text>
+                  <Text style={s.mintedTagText}>✦ Claimed</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -231,9 +255,9 @@ export default function BadgesScreen() {
           <View style={s.modalBox}>
             <View style={s.modalHandle}/>
             <Text style={{ fontSize: 40, marginBottom: 12 }}>🎉</Text>
-            <Text style={s.modalTitle}>NFT Minted!</Text>
+            <Text style={s.modalTitle}>Points Claimed! ✨</Text>
             <Text style={[s.modalAddr, { color: C.amber }]}>{mintSuccess?.badgeName}</Text>
-            <Text style={s.modalDesc}>Your badge has been successfully recorded on the Solana blockchain.</Text>
+            <Text style={s.modalDesc}>+{mintSuccess?.points ?? 0} points claimed and recorded on Solana.</Text>
             <View style={{ backgroundColor: C.bg2, borderRadius: 12, padding: 12, width: '100%', marginBottom: 20 }}>
               <Text style={{ fontSize: 10, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>TRANSACTION</Text>
               <Text style={{ fontSize: 11, color: C.sub, fontWeight: '600' }} numberOfLines={1}>{mintSuccess?.tx}</Text>
@@ -252,7 +276,7 @@ export default function BadgesScreen() {
             <View style={s.modalHandle}/>
             <Text style={s.modalTitle}>Disconnect Wallet?</Text>
             <Text style={s.modalAddr}>{shortAddress}</Text>
-            <Text style={s.modalDesc}>Disconnecting your wallet will disable points earning and NFT badge features.</Text>
+            <Text style={s.modalDesc}>Disconnecting your wallet will disable points earning and on-chain achievement records.</Text>
             <TouchableOpacity style={s.modalDisconnect} onPress={() => { disconnect(); setShowDisconnect(false) }}>
               <Text style={s.modalDisconnectText}>Disconnect</Text>
             </TouchableOpacity>

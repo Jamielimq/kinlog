@@ -6,6 +6,7 @@ import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor } from 'react-native-vision-camera'
 import { useWallet } from '../../context/WalletContext'
+import { updateChallengeProgress } from '../../hooks/challengeProgress'
 import { ALL_BADGES } from '../../hooks/useBadges'
 import { calcAngle, usePoseLandmarker } from '../../hooks/usePoseLandmarker'
 
@@ -53,6 +54,8 @@ async function checkAndAwardBadges(address: string, totalSquats: number, current
     if (badge.id === 'first_rep' && totalSquats >= 1) {
       await setDoc(doc(db, 'users', address, 'badges', badge.id), { earned: true, earnedAt: now }, { merge: true })
     }
+    // perfect_month: check if monthly goal current == total
+    // (handled separately when month ends)
   }
 }
 
@@ -134,6 +137,13 @@ async function saveWorkout(address: string, reps: number, elapsed: number) {
   }, { merge: true })
 
   await checkAndAwardBadges(address, newTotalSquats, newStreak)
+
+  // Challenge progress is best-effort — its failure must not fail the workout save.
+  try {
+    await updateChallengeProgress(address, newDailyReps, now)
+  } catch (e) {
+    console.error('Challenge progress error:', e)
+  }
 
   return { effectiveReps }
 }

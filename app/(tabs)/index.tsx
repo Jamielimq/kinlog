@@ -14,10 +14,19 @@ const C = {
   text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
 }
 
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 6) return 'LATE NIGHT'
+  if (h < 12) return 'GOOD MORNING'
+  if (h < 18) return 'GOOD AFTERNOON'
+  return 'GOOD EVENING'
+}
+
 function getActivityIcon(reason: string) {
-  if (reason.toLowerCase().includes('minted') || reason.toLowerCase().includes('nft')) return '✦'
-  if (reason.toLowerCase().includes('streak')) return '🔥'
-  if (reason.toLowerCase().includes('badge')) return '🏅'
+  const r = reason.toLowerCase()
+  if (r.includes('claimed') || r.includes('minted') || r.includes('nft')) return '✦'
+  if (r.includes('streak')) return '🔥'
+  if (r.includes('badge')) return '🏅'
   return '🏋️'
 }
 
@@ -62,7 +71,7 @@ export default function HomeScreen() {
 
         {/* Greeting */}
         <View style={s.greet}>
-          <Text style={s.greetSub}>GOOD MORNING</Text>
+          <Text style={s.greetSub}>{getGreeting()}</Text>
           <Text style={s.greetTitle}>Ready to move?</Text>
         </View>
 
@@ -154,7 +163,7 @@ export default function HomeScreen() {
             <View style={s.modalDot}/>
             <Text style={s.modalTitle}>Disconnect Wallet?</Text>
             <Text style={s.modalAddr}>{shortAddress}</Text>
-            <Text style={s.modalDesc}>Disconnecting your wallet will disable points earning and NFT badge features.</Text>
+            <Text style={s.modalDesc}>Disconnecting your wallet will disable points earning and on-chain achievement records.</Text>
             <TouchableOpacity style={s.modalDisconnect} onPress={() => { disconnect(); setShowDisconnect(false) }}>
               <Text style={s.modalDisconnectText}>Disconnect</Text>
             </TouchableOpacity>

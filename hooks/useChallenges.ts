@@ -1,6 +1,7 @@
 import { getApp } from '@react-native-firebase/app';
 import {
   collection,
+  FirebaseFirestoreTypes,
   getFirestore,
   onSnapshot,
   orderBy,
@@ -114,7 +115,7 @@ export function useChallenges(address: string | null) {
       where('isActive', '==', true),
       orderBy('displayOrder', 'asc'),
     );
-    const unsubscribe = onSnapshot(q, snap => {
+    const unsubscribe = onSnapshot(q, (snap: FirebaseFirestoreTypes.QuerySnapshot) => {
       setCatalog(
         snap.docs.map(d => ({
           ...(d.data() as Omit<ChallengeCatalog, 'id'>),
@@ -135,7 +136,7 @@ export function useChallenges(address: string | null) {
     }
     const db = getFirestore(getApp());
     const ref = collection(db, 'users', address, 'userChallenges');
-    const unsubscribe = onSnapshot(ref, snap => {
+    const unsubscribe = onSnapshot(ref, (snap: FirebaseFirestoreTypes.QuerySnapshot) => {
       setInstances(
         snap.docs.map(d => ({
           ...(d.data() as Omit<UserChallengeInstance, 'id'>),

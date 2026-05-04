@@ -1,5 +1,5 @@
 import { getApp } from '@react-native-firebase/app';
-import { collection, doc, getFirestore, onSnapshot, setDoc } from '@react-native-firebase/firestore';
+import { collection, doc, FirebaseFirestoreTypes, getDoc, getFirestore, onSnapshot, setDoc } from '@react-native-firebase/firestore';
 import { useEffect, useState } from 'react';
 
 export interface Goal {
@@ -33,20 +33,46 @@ export function useGoals(address: string | null) {
     const goalsRef = collection(db, 'users', address, 'goals');
 
     const init = async () => {
-      // Reset daily goal if it's a new day
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const todayTs = todayStart.getTime();
+
+      // Daily reset
       const dailyRef = doc(db, 'users', address, 'goals', 'daily');
-      const dailySnap = await dailyRef.get();
-      const lastReset = dailySnap.data()?.lastResetDate ?? 0;
-      if (lastReset < todayTs) {
+      const dailySnap = await getDoc(dailyRef);
+      const dailyLastReset = dailySnap.data()?.lastResetDate ?? 0;
+      if (dailyLastReset < todayTs) {
         await setDoc(dailyRef, { current: 0, lastResetDate: todayTs }, { merge: true });
+      }
+
+      // Weekly reset (Monday start)
+      const ws = new Date();
+      ws.setHours(0, 0, 0, 0);
+      ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7));
+      const weekTs = ws.getTime();
+      const weeklyRef = doc(db, 'users', address, 'goals', 'weekly');
+      const weeklySnap = await getDoc(weeklyRef);
+      const weeklyLastReset = weeklySnap.data()?.lastResetDate ?? 0;
+      if (weeklyLastReset < weekTs) {
+        await setDoc(weeklyRef, { current: 0, lastResetDate: weekTs }, { merge: true });
+      }
+
+      // Monthly reset
+      const ms = new Date();
+      ms.setHours(0, 0, 0, 0);
+      ms.setDate(1);
+      const monthTs = ms.getTime();
+      const monthlyRef = doc(db, 'users', address, 'goals', 'monthly');
+      const monthlySnap = await getDoc(monthlyRef);
+      const monthlyLastReset = monthlySnap.data()?.lastResetDate ?? 0;
+      if (monthlyLastReset < monthTs) {
+        const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+        await setDoc(monthlyRef, { current: 0, total: daysInMonth, lastResetDate: monthTs }, { merge: true });
       }
     };
     init();
 
-    const unsubscribe = onSnapshot(goalsRef, async snapshot => {
+    const unsubscribe = onSnapshot(goalsRef, async (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
       if (snapshot.empty) {
         // Initialize default goals
         for (const goal of DEFAULT_GOALS) {

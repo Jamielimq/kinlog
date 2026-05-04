@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useWallet } from '../../context/WalletContext'
+import { useChallenges } from '../../hooks/useChallenges'
 import { useGoals } from '../../hooks/useGoals'
 import { usePoints } from '../../hooks/usePoints'
 import { useUserStats } from '../../hooks/useUserStats'
@@ -36,6 +37,7 @@ export default function HomeScreen() {
   const { history } = usePoints(address)
   const { goals } = useGoals(address)
   const { stats } = useUserStats(address)
+  const { challenges } = useChallenges(address)
   const [showDisconnect, setShowDisconnect] = useState(false)
 
   const dailyGoal = goals.find(g => g.id === 'daily')
@@ -46,6 +48,30 @@ export default function HomeScreen() {
 
   const formattedPoints = stats.points.toLocaleString()
   const streakDisplay = stats.currentStreak > 0 ? `${stats.currentStreak}d` : '0d'
+
+  // Quests: claim-pending first, then active by progress.
+  const inProgressQuests = challenges
+    .filter(c => c.instance && (c.instance.status === 'active' || c.instance.status === 'completed'))
+    .sort((a, b) => {
+      const ra = a.instance!.status === 'completed' ? 0 : 1
+      const rb = b.instance!.status === 'completed' ? 0 : 1
+      if (ra !== rb) return ra - rb
+      return b.progressPct - a.progressPct
+    })
+  const heroQuest = inProgressQuests[0] ?? null
+  const moreQuestCount = Math.max(0, inProgressQuests.length - 1)
+  const heroIsClaim = heroQuest?.instance?.status === 'completed'
+
+  // Live calendar day index (instance.progress.dayIndex only updates on workout save).
+  const heroLiveDayIndex = heroQuest
+    ? Math.max(
+        1,
+        Math.min(
+          heroQuest.catalog.requirementDays,
+          Math.floor((Date.now() - heroQuest.instance!.startedAt) / 86400000) + 1,
+        ),
+      )
+    : 0
 
   return (
     <SafeAreaView style={s.safe}>
@@ -126,6 +152,92 @@ export default function HomeScreen() {
             <Text style={{ color: C.amber2, fontSize: 18 }}>▶</Text>
           </View>
         </TouchableOpacity>
+
+        {/* Quests */}
+        {publicKey && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Quests</Text>
+
+            {!heroQuest ? (
+              <TouchableOpacity
+                style={s.questEmpty}
+                onPress={() => router.push('/challenges')}
+                activeOpacity={0.85}
+              >
+                <View style={s.questEmptyIcon}>
+                  <Text style={{ fontSize: 18 }}>🛡</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.questEmptyTitle}>Start your first quest</Text>
+                  <Text style={s.questEmptySub}>Earn verified rewards</Text>
+                </View>
+                <Text style={s.questEmptyArrow}>→</Text>
+              </TouchableOpacity>
+            ) : heroIsClaim ? (
+              <TouchableOpacity
+                style={s.questClaim}
+                onPress={() => router.push(`/challenges/${heroQuest.catalog.id}`)}
+                activeOpacity={0.85}
+              >
+                <View style={s.questHeadRow}>
+                  <Text style={s.questClaimLabel}>✓ READY TO CLAIM</Text>
+                  <View style={s.questClaimBadge}>
+                    <Text style={s.questClaimBadgeText}>🛡 {heroQuest.catalog.nft.romanNumeral}</Text>
+                  </View>
+                </View>
+                <Text style={s.questClaimTitle}>{heroQuest.catalog.name}</Text>
+                <Text style={s.questClaimReward}>
+                  Reward: +{heroQuest.catalog.bonusPoints} points
+                </Text>
+                <View style={s.questClaimCta}>
+                  <Text style={s.questClaimCtaText}>Claim Reward →</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={s.questHero}
+                onPress={() => router.push(`/challenges/${heroQuest.catalog.id}`)}
+                activeOpacity={0.85}
+              >
+                <View style={s.questHeroStrip} />
+                <View style={s.questHeroBody}>
+                  <View style={s.questHeadRow}>
+                    <Text style={s.questHeroLabel}>ACTIVE QUEST</Text>
+                    <View style={s.questHeroBadge}>
+                      <Text style={s.questHeroBadgeText}>🛡 {heroQuest.catalog.nft.romanNumeral}</Text>
+                    </View>
+                  </View>
+                  <Text style={s.questHeroTitle}>{heroQuest.catalog.name}</Text>
+                  <Text style={s.questHeroSub}>
+                    {heroQuest.catalog.requirementDays} days · {heroQuest.catalog.requirementDailyReps} squats/day
+                  </Text>
+                  <View style={s.questProgressBar}>
+                    <View style={[s.questProgressFill, { width: `${heroQuest.progressPct * 100}%` }]} />
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={s.questProgressNote}>
+                      Day {heroLiveDayIndex} of {heroQuest.catalog.requirementDays}
+                      {heroQuest.daysRemaining !== null ? ` · ${heroQuest.daysRemaining} days left` : ''}
+                    </Text>
+                    <Text style={s.questProgressPct}>{Math.round(heroQuest.progressPct * 100)}%</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {moreQuestCount > 0 && (
+              <TouchableOpacity
+                style={s.questMore}
+                onPress={() => router.push('/challenges')}
+                activeOpacity={0.7}
+              >
+                <Text style={s.questMoreText}>
+                  + {moreQuestCount} more quest{moreQuestCount > 1 ? 's' : ''} →
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Recent Activity */}
         <View style={s.section}>
@@ -231,6 +343,39 @@ const s = StyleSheet.create({
 
   emptyState:    { paddingVertical: 20, alignItems: 'center' },
   emptyText:     { fontSize: 12, color: C.muted, textAlign: 'center' },
+
+  questHeadRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+
+  questEmpty:          { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.amberBg, borderRadius: 18, padding: 16, borderWidth: 1.5, borderColor: `${C.amber}33` },
+  questEmptyIcon:      { width: 40, height: 40, borderRadius: 13, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: `${C.amber}33` },
+  questEmptyTitle:     { fontSize: 14, fontWeight: '800', color: C.text, marginBottom: 2 },
+  questEmptySub:       { fontSize: 11, color: C.amber },
+  questEmptyArrow:     { fontSize: 18, color: C.amber, fontWeight: '700' },
+
+  questHero:           { flexDirection: 'row', backgroundColor: C.card, borderRadius: 18, borderWidth: 1.5, borderColor: C.line, overflow: 'hidden' },
+  questHeroStrip:      { width: 4, backgroundColor: C.amber2 },
+  questHeroBody:       { flex: 1, padding: 16 },
+  questHeroLabel:      { fontSize: 9, color: C.muted, letterSpacing: 1.2, fontWeight: '700' },
+  questHeroBadge:      { backgroundColor: C.bg2, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
+  questHeroBadgeText:  { fontSize: 10, color: C.dark2, fontWeight: '700' },
+  questHeroTitle:      { fontSize: 17, fontWeight: '800', color: C.text, letterSpacing: -0.3, marginBottom: 2 },
+  questHeroSub:        { fontSize: 11, color: C.sub, marginBottom: 12 },
+  questProgressBar:    { height: 5, backgroundColor: C.bg3, borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
+  questProgressFill:   { height: 5, backgroundColor: C.amber2, borderRadius: 100 },
+  questProgressNote:   { fontSize: 10, color: C.muted },
+  questProgressPct:    { fontSize: 10, fontWeight: '700', color: C.amber2 },
+
+  questClaim:          { backgroundColor: C.amber2, borderRadius: 18, padding: 18, shadowColor: C.amber, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
+  questClaimLabel:     { fontSize: 9, color: `${C.dark}99`, letterSpacing: 1.5, fontWeight: '700' },
+  questClaimBadge:     { backgroundColor: C.dark, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
+  questClaimBadgeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  questClaimTitle:     { fontSize: 18, fontWeight: '900', color: C.dark, letterSpacing: -0.4, marginBottom: 2 },
+  questClaimReward:    { fontSize: 12, color: `${C.dark}CC`, marginBottom: 14, fontWeight: '600' },
+  questClaimCta:       { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  questClaimCtaText:   { color: '#fff', fontSize: 14, fontWeight: '800' },
+
+  questMore:           { paddingVertical: 12, alignItems: 'center' },
+  questMoreText:       { fontSize: 12, color: C.sub, fontWeight: '600' },
 
   modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox:            { backgroundColor: C.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 40, alignItems: 'center' },

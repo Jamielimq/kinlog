@@ -1,5 +1,5 @@
 import { getApp } from '@react-native-firebase/app';
-import { collection, getFirestore, onSnapshot, query, where } from '@react-native-firebase/firestore';
+import { collection, FirebaseFirestoreTypes, getFirestore, onSnapshot, query, where } from '@react-native-firebase/firestore';
 import { useEffect, useState } from 'react';
 
 export interface DayData {
@@ -38,7 +38,7 @@ export function useWeeklyChart(address: string | null) {
       where('createdAt', '<=', sunday.getTime()),
     );
 
-    const unsubscribe = onSnapshot(q, snapshot => {
+    const unsubscribe = onSnapshot(q, (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
       // 요일별 reps 합산 (0=Mon ~ 6=Sun)
       const repsByDay: number[] = [0, 0, 0, 0, 0, 0, 0];
 

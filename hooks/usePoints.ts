@@ -1,5 +1,5 @@
 import { getApp } from '@react-native-firebase/app';
-import { addDoc, collection, doc, getFirestore, increment, limit, onSnapshot, orderBy, query, setDoc } from '@react-native-firebase/firestore';
+import { addDoc, collection, doc, FirebaseFirestoreTypes, getFirestore, increment, limit, onSnapshot, orderBy, query, setDoc } from '@react-native-firebase/firestore';
 import { useEffect, useState } from 'react';
 
 export interface PointsHistory {
@@ -34,8 +34,8 @@ export function usePoints(address: string | null) {
     // Real-time listener for points history
     const historyRef = collection(db, 'users', address, 'points_history');
     const q = query(historyRef, orderBy('createdAt', 'desc'), limit(20));
-    const unsubHistory = onSnapshot(q, snapshot => {
-      const data = snapshot?.docs?.map(d => ({ id: d.id, ...d.data() } as PointsHistory)) ?? [];
+    const unsubHistory = onSnapshot(q, (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PointsHistory));
       setHistory(data);
     });
 

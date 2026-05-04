@@ -13,6 +13,7 @@ import { getApp } from '@react-native-firebase/app';
 import {
   collection,
   doc,
+  FirebaseFirestoreTypes,
   getDocs,
   getFirestore,
   query,
@@ -139,7 +140,7 @@ export async function updateChallengeProgress(
   const db = getFirestore(getApp());
   const colRef = collection(db, 'users', address, 'userChallenges');
 
-  const activeSnap = await getDocs(query(colRef, where('status', '==', 'active')));
+  const activeSnap: FirebaseFirestoreTypes.QuerySnapshot = await getDocs(query(colRef, where('status', '==', 'active')));
   if (activeSnap.empty) return;
 
   const tasks = activeSnap.docs.map(async d => {

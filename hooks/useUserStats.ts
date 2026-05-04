@@ -38,14 +38,22 @@ export function useUserStats(address: string | null) {
 
     const unsubscribe = onSnapshot(userRef, snap => {
       const data = snap.data() ?? {};
+      const lastWorkout = data.lastWorkoutDate ?? 0;
+
+      // Streak is only valid if last workout was today or yesterday
+      const td = new Date();
+      td.setHours(0, 0, 0, 0);
+      const yesterday = td.getTime() - 86400000;
+      const validStreak = lastWorkout >= yesterday ? (data.currentStreak ?? 0) : 0;
+
       setStats({
         points: data.points ?? 0,
         totalSquats: data.totalSquats ?? 0,
         totalWorkouts: data.totalWorkouts ?? 0,
-        currentStreak: data.currentStreak ?? 0,
+        currentStreak: validStreak,
         bestStreak: data.bestStreak ?? 0,
         dailyReps: data.dailyReps ?? 0,
-        lastWorkoutDate: data.lastWorkoutDate ?? 0,
+        lastWorkoutDate: lastWorkout,
       });
       setLoading(false);
     });

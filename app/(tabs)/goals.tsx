@@ -105,10 +105,8 @@ export default function GoalsScreen() {
           )
         })}
 
-        {/* New Goal button */}
-        <TouchableOpacity style={s.newGoalBtn} activeOpacity={0.85}>
-          <Text style={s.newGoalText}>+ Set New Goal</Text>
-        </TouchableOpacity>
+        {/* Spacer */}
+        <View style={{ height: 8 }}/>
 
       </ScrollView>
     </SafeAreaView>
@@ -153,6 +151,5 @@ const s = StyleSheet.create({
   dotText:       { fontSize: 8, color: C.muted },
   dotTextActive: { color: '#fff', fontWeight: '700' },
 
-  newGoalBtn:  { backgroundColor: C.dark, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 4 },
-  newGoalText: { fontSize: 15, fontWeight: '700', color: C.amber2 },
+
 })

@@ -6,6 +6,8 @@ import { getApp } from '@react-native-firebase/app';
 import {
   addDoc,
   collection,
+  doc,
+  getDoc,
   getDocs,
   getFirestore,
   limit,
@@ -13,6 +15,7 @@ import {
   query,
   where,
 } from '@react-native-firebase/firestore';
+import { localDateKey } from './challengeProgress';
 import {
   Connection,
   PublicKey,
@@ -102,6 +105,18 @@ export function useStartChallenge() {
           throw new Error('No transaction signature returned.');
         }
 
+        // Backfill day 1 if today's daily goal already meets the per-day
+        // requirement — squats done before starting a quest still count.
+        const dailySnap = await getDoc(
+          doc(db, 'users', address, 'goals', 'daily'),
+        );
+        const todayCurrent: number = (dailySnap.data() as any)?.current ?? 0;
+        const todayKey = localDateKey(startedAt);
+        const todayMet = todayCurrent >= catalog.requirementDailyReps;
+        const initialDaysLog = todayMet
+          ? { [todayKey]: { reps: todayCurrent, met: true } }
+          : {};
+
         // Firestore write only after on-chain success.
         const instance: Omit<UserChallengeInstance, 'id'> = {
           challengeId: catalog.id,
@@ -118,9 +133,9 @@ export function useStartChallenge() {
             mintFeeLamports: catalog.mintFeeLamports,
           },
           progress: {
-            dayIndex: 0,
-            daysLog: {},
-            lastProgressDate: '',
+            dayIndex: 1,
+            daysLog: initialDaysLog,
+            lastProgressDate: todayMet ? todayKey : '',
           },
         };
 

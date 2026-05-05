@@ -4,6 +4,7 @@ import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl } from
 import { useEffect, useState } from 'react'
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { RARITY_COLOR } from '../../constants/rarity'
 import { useWallet } from '../../context/WalletContext'
 import { useBadges } from '../../hooks/useBadges'
 import { useSkrStaking } from '../../hooks/useSkrStaking'
@@ -13,10 +14,6 @@ const C = {
   card: '#FFFFFF', dark: '#2D2926', dark2: '#3A3532',
   amber: '#D97706', amber2: '#F59E0B', amber3: '#FCD34D', amberBg: '#FFFBEB',
   text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
-}
-
-const RARITY_COLOR: Record<string, string> = {
-  Common: '#78716C', Uncommon: '#0EA5E9', Rare: '#F59E0B', Epic: '#A855F7', Legendary: '#EF4444',
 }
 
 

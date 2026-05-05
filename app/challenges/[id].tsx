@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { RARITY_COLOR } from '../../constants/rarity'
 import { useWallet } from '../../context/WalletContext'
 import { localDateKey } from '../../hooks/challengeProgress'
 import { useChallenges } from '../../hooks/useChallenges'
@@ -27,14 +28,6 @@ const C = {
   text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
   red: '#EF4444', redBg: '#FEE2E2',
   green: '#10B981',
-}
-
-const RARITY_COLOR: Record<string, string> = {
-  Common:    '#78716C',
-  Uncommon:  '#0EA5E9',
-  Rare:      '#F59E0B',
-  Epic:      '#A855F7',
-  Legendary: '#EF4444',
 }
 
 type CellState = 'met' | 'today' | 'missed' | 'future'

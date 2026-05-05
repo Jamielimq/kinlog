@@ -424,7 +424,7 @@ function DayCellView({ cell, size }: { cell: DayCell; size: number }) {
   if (cell.state === 'met') {
     bg = C.amber2; numColor = '#fff'; mark = '✓'
   } else if (cell.state === 'today') {
-    bg = C.amberBg; borderColor = C.amber2; borderWidth = 2; numColor = C.amber; mark = '●'; markColor = C.amber
+    bg = C.amberBg; borderColor = C.amber2; borderWidth = 2; numColor = C.amber
   } else if (cell.state === 'missed') {
     bg = C.redBg; borderColor = C.red; borderWidth = 1.5; numColor = C.red; mark = '✗'; markColor = C.red
   }

@@ -240,23 +240,25 @@ export default function ChallengeDetailScreen() {
         {/* Requirements */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Requirements</Text>
-          <View style={s.reqRow}>
-            <Text style={s.reqDot}>•</Text>
-            <Text style={s.reqText}>
-              <Text style={s.reqStrong}>{catalog.requirementDays} days</Text> · {catalog.requirementDailyReps} squats per day
-            </Text>
-          </View>
-          <View style={s.reqRow}>
-            <Text style={s.reqDot}>•</Text>
-            <Text style={s.reqText}>
-              Reward: <Text style={s.reqAmber}>+{catalog.bonusPoints.toLocaleString()} points</Text>
-            </Text>
-          </View>
-          <View style={s.reqRow}>
-            <Text style={s.reqDot}>•</Text>
-            <Text style={s.reqText}>
-              Mint fee: {(catalog.mintFeeLamports / 1_000_000_000).toFixed(3)} SOL (charged on claim)
-            </Text>
+          <View style={s.sectionCard}>
+            <View style={s.reqRow}>
+              <Text style={s.reqDot}>•</Text>
+              <Text style={s.reqText}>
+                <Text style={s.reqStrong}>{catalog.requirementDays} days</Text> · {catalog.requirementDailyReps} squats per day
+              </Text>
+            </View>
+            <View style={s.reqRow}>
+              <Text style={s.reqDot}>•</Text>
+              <Text style={s.reqText}>
+                Reward: <Text style={s.reqAmber}>+{catalog.bonusPoints.toLocaleString()} points</Text>
+              </Text>
+            </View>
+            <View style={[s.reqRow, s.reqRowLast]}>
+              <Text style={s.reqDot}>•</Text>
+              <Text style={s.reqText}>
+                Mint fee: {(catalog.mintFeeLamports / 1_000_000_000).toFixed(3)} SOL (charged on claim)
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -264,7 +266,9 @@ export default function ChallengeDetailScreen() {
         {catalog.description ? (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Description</Text>
-            <Text style={s.desc}>{catalog.description}</Text>
+            <View style={s.sectionCard}>
+              <Text style={s.desc}>{catalog.description}</Text>
+            </View>
           </View>
         ) : null}
 
@@ -510,14 +514,18 @@ const s = StyleSheet.create({
   sectionTitle: { fontSize: 11, color: C.muted, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10, textTransform: 'uppercase' },
 
   // Requirements
-  reqRow:    { flexDirection: 'row', gap: 8, marginBottom: 6 },
-  reqDot:    { fontSize: 13, color: C.muted, lineHeight: 18 },
-  reqText:   { fontSize: 13, color: C.sub, flex: 1, lineHeight: 18 },
-  reqStrong: { color: C.text, fontWeight: '700' },
-  reqAmber:  { color: C.amber, fontWeight: '700' },
+  reqRow:     { flexDirection: 'row', gap: 8, marginBottom: 6 },
+  reqRowLast: { marginBottom: 0 },
+  reqDot:     { fontSize: 13, color: C.muted, lineHeight: 18 },
+  reqText:    { fontSize: 13, color: C.sub, flex: 1, lineHeight: 18 },
+  reqStrong:  { color: C.text, fontWeight: '700' },
+  reqAmber:   { color: C.amber, fontWeight: '700' },
 
   // Description
   desc: { fontSize: 13, color: C.sub, lineHeight: 20 },
+
+  // Generic section card (Requirements / Description wrapper)
+  sectionCard: { backgroundColor: C.card, borderRadius: 16, borderWidth: 0.5, borderColor: C.line, paddingVertical: 14, paddingHorizontal: 16 },
 
   // Days grid
   daysGrid:     { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },

@@ -154,7 +154,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         {/* Quests */}
-        {publicKey && (
+        {publicKey ? (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Quests</Text>
 
@@ -225,18 +225,41 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
 
-            {moreQuestCount > 0 && (
+            {inProgressQuests.length === 1 ? (
+              <TouchableOpacity
+                style={s.questMore}
+                onPress={() => router.push('/challenges')}
+                activeOpacity={0.7}
+              >
+                <Text style={s.questMoreText}>+ Add another quest →</Text>
+              </TouchableOpacity>
+            ) : moreQuestCount > 0 ? (
               <TouchableOpacity
                 style={s.questMore}
                 onPress={() => router.push('/challenges')}
                 activeOpacity={0.7}
               >
                 <Text style={s.questMoreText}>
-                  + {moreQuestCount} more quest{moreQuestCount > 1 ? 's' : ''} →
+                  + {moreQuestCount} more quest{moreQuestCount > 1 ? 's' : ''} in progress →
                 </Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
+        ) : (
+          <TouchableOpacity
+            style={s.questGuestCard}
+            onPress={() => router.push('/challenges')}
+            activeOpacity={0.85}
+          >
+            <View style={s.questGuestIconBox}>
+              <Text style={{ fontSize: 16 }}>🛡</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.questGuestTitle}>View available quests</Text>
+              <Text style={s.questGuestSub}>Connect wallet to start</Text>
+            </View>
+            <Text style={s.questGuestArrow}>→</Text>
+          </TouchableOpacity>
         )}
 
         {/* Recent Activity */}
@@ -374,8 +397,14 @@ const s = StyleSheet.create({
   questClaimCta:       { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   questClaimCtaText:   { color: '#fff', fontSize: 14, fontWeight: '800' },
 
-  questMore:           { paddingVertical: 12, alignItems: 'center' },
-  questMoreText:       { fontSize: 12, color: C.sub, fontWeight: '600' },
+  questMore:           { paddingVertical: 16, alignItems: 'center' },
+  questMoreText:       { fontSize: 14, color: C.sub, fontWeight: '500' },
+
+  questGuestCard:      { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 0.5, borderColor: C.line, marginBottom: 24 },
+  questGuestIconBox:   { width: 36, height: 36, borderRadius: 10, backgroundColor: C.amberBg, alignItems: 'center', justifyContent: 'center' },
+  questGuestTitle:     { fontSize: 15, fontWeight: '500', color: C.text, marginBottom: 2 },
+  questGuestSub:       { fontSize: 12, color: C.sub },
+  questGuestArrow:     { fontSize: 18, color: C.muted, fontWeight: '600' },
 
   modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox:            { backgroundColor: C.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 40, alignItems: 'center' },

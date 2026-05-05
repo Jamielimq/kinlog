@@ -196,7 +196,7 @@ export default function ChallengeDetailScreen() {
     bottom = { label: isStarting ? 'Starting...' : 'Start Quest', onPress: handleStart, primary: true, disabled: isStarting }
   } else if (status === 'active') {
     bottom = todayMet
-      ? { label: "Today's goal met ✓", onPress: () => {}, primary: false, disabled: true }
+      ? { label: "Today's goal done ✓", onPress: () => {}, primary: false, disabled: true }
       : { label: 'Go to Workout →', onPress: () => router.push('/workout'), primary: true }
   } else if (status === 'completed') {
     bottom = { label: isClaiming ? 'Claiming...' : 'Claim Reward →', onPress: handleClaim, primary: true, disabled: isClaiming }
@@ -285,7 +285,7 @@ export default function ChallengeDetailScreen() {
               ))}
             </View>
             <View style={s.legend}>
-              <LegendItem color={C.amber2} label="Met" />
+              <LegendItem color={C.amber2} label="Done" />
               <LegendItem color={C.amberBg} borderColor={C.amber2} label="Today" />
               <LegendItem color={C.redBg} borderColor={C.red} label="Missed" />
               <LegendItem color={C.bg2} label="Future" />
@@ -310,7 +310,7 @@ export default function ChallengeDetailScreen() {
               </View>
               <Text style={s.todayNote}>
                 {todayMet
-                  ? '🎉 Daily target met!'
+                  ? '🎉 Daily target done!'
                   : `${Math.max(0, todayTarget - todayReps)} more squats to meet today`}
               </Text>
             </View>

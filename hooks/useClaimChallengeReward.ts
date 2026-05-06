@@ -34,6 +34,7 @@ import {
 import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 import { useWallet } from '../context/WalletContext';
+import { ALL_BADGES } from './useBadges';
 import type { ChallengeView, UserChallengeInstance } from './useChallenges';
 
 const TREASURY_WALLET = new PublicKey(
@@ -173,6 +174,26 @@ export function useClaimChallengeReward() {
           });
         } catch (pointsError) {
           console.error('Points award failed (non-fatal):', pointsError);
+        }
+
+        // Best-effort badge auto-mint — claim already succeeded; this is bookkeeping.
+        try {
+          const badge = ALL_BADGES.find(b => b.questId === view.catalog.id);
+          if (badge) {
+            const badgeRef = doc(db, 'users', address, 'badges', badge.id);
+            const existing = await getDoc(badgeRef);
+            if (!existing.exists() || !existing.data()?.earned) {
+              await setDoc(
+                badgeRef,
+                { earned: true, earnedAt: now, mintedAt: now },
+                { merge: true },
+              );
+            }
+            // else: preserve first-unlock timestamp; ×N count derives from
+            // userChallenges subscription (see useBadges).
+          }
+        } catch (badgeError) {
+          console.error('Badge auto-mint failed (non-fatal):', badgeError);
         }
 
         return { txSignature, awardedPoints };

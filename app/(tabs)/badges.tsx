@@ -222,7 +222,7 @@ export default function BadgesScreen() {
               {b.earned ? (
                 <View style={s.earnedTag}>
                   <Text style={s.earnedTagText}>
-                    +{b.pts}pt{b.earnedAt ? ` · ${new Date(b.earnedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}` : ''}
+                    {b.pts > 0 ? `+${b.pts}pt` : 'Earned'}{b.earnedAt ? ` · ${new Date(b.earnedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}` : ''}
                   </Text>
                 </View>
               ) : (

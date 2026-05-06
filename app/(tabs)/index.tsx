@@ -365,7 +365,7 @@ const s = StyleSheet.create({
   startBtnIcon:     { width: 44, height: 44, borderRadius: 22, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center' },
 
   section:       { marginBottom: 24 },
-  sectionTitle:  { fontSize: 14, fontWeight: '800', color: C.text, marginBottom: 12 },
+  sectionTitle:  { fontSize: 17, fontWeight: '900', color: C.text, marginBottom: 12 },
   activityRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
   activityBorder:{ borderBottomWidth: 1, borderBottomColor: C.line },
   activityIcon:  { width: 40, height: 40, borderRadius: 13, backgroundColor: C.bg2, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.line },

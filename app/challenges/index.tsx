@@ -15,10 +15,11 @@ const C = {
 }
 
 function tierOf(c: ChallengeView): number {
-  if (c.instance?.status === 'completed') return 0
-  if (c.instance?.status === 'active')    return 1
-  if (!c.instance || c.instance.status === 'failed') return 2
-  return 3 // claimed
+  const st = c.instance?.status
+  if (st === 'completed') return 0 // claim-pending
+  if (st === 'active')    return 1
+  if (st === 'failed')    return 2 // retry-eligible, ranked above fresh
+  return 3 // available (no instance)
 }
 
 export default function ChallengesScreen() {
@@ -29,7 +30,13 @@ export default function ChallengesScreen() {
   const [startingId, setStartingId] = useState<string | null>(null)
 
   const sorted = useMemo(
-    () => [...challenges].sort((a, b) => tierOf(a) - tierOf(b)),
+    () =>
+      challenges
+        .filter(c => c.instance?.status !== 'claimed')
+        .sort((a, b) => {
+          const t = tierOf(a) - tierOf(b)
+          return t !== 0 ? t : a.catalog.requirementDays - b.catalog.requirementDays
+        }),
     [challenges],
   )
 

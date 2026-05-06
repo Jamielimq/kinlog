@@ -511,7 +511,7 @@ const s = StyleSheet.create({
 
   // Section
   section:      { marginBottom: 22 },
-  sectionTitle: { fontSize: 11, color: C.muted, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10, textTransform: 'uppercase' },
+  sectionTitle: { fontSize: 11, color: C.sub, fontWeight: '800', letterSpacing: 1.2, marginBottom: 10, textTransform: 'uppercase' },
 
   // Requirements
   reqRow:     { flexDirection: 'row', gap: 8, marginBottom: 6 },
@@ -540,7 +540,7 @@ const s = StyleSheet.create({
   // Today's status
   todayCard:        { backgroundColor: C.card, borderRadius: 16, borderWidth: 1.5, borderColor: C.line, padding: 16 },
   todayTopRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  todayLabel:       { fontSize: 9, color: C.muted, letterSpacing: 1.2, fontWeight: '800' },
+  todayLabel:       { fontSize: 9, color: C.sub, letterSpacing: 1.2, fontWeight: '800' },
   todayCount:       { fontSize: 18 },
   todayCountNum:    { fontSize: 22, fontWeight: '900', color: C.text },
   todayCountTarget: { fontSize: 14, color: C.muted, fontWeight: '700' },
@@ -552,7 +552,7 @@ const s = StyleSheet.create({
   // Audit
   auditCard:  { backgroundColor: C.card, borderRadius: 16, borderWidth: 1.5, borderColor: C.line, paddingHorizontal: 14, paddingVertical: 4 },
   auditRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.line },
-  auditLabel: { fontSize: 11, color: C.muted, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  auditLabel: { fontSize: 11, color: C.sub, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
   auditValue: { fontSize: 12, color: C.text, fontWeight: '600', flexShrink: 1, marginLeft: 12, textAlign: 'right' },
   auditMono:  { fontSize: 10, color: C.sub },
   auditLink:  { color: C.amber },
@@ -574,7 +574,7 @@ const s = StyleSheet.create({
   modalPoints:      { fontSize: 28, fontWeight: '900', color: C.amber, marginBottom: 4 },
   modalQuestName:   { fontSize: 13, color: C.sub, marginBottom: 18 },
   modalTxBox:       { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.bg2, borderRadius: 100, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 18 },
-  modalTxLabel:     { fontSize: 9, color: C.muted, fontWeight: '800', letterSpacing: 1 },
+  modalTxLabel:     { fontSize: 9, color: C.sub, fontWeight: '800', letterSpacing: 1 },
   modalTxValue:     { fontSize: 11, color: C.dark, fontWeight: '700' },
   modalSolscan:     { width: '100%', backgroundColor: C.dark, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 8 },
   modalSolscanText: { color: '#fff', fontSize: 14, fontWeight: '800' },

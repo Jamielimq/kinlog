@@ -197,9 +197,7 @@ export default function ChallengeDetailScreen() {
   } else if (!instance) {
     bottom = { label: isStarting ? 'Starting...' : 'Start Quest', onPress: handleStart, primary: true, disabled: isStarting }
   } else if (status === 'active') {
-    bottom = todayMet
-      ? { label: "Today's goal done ✓", onPress: () => {}, primary: false, disabled: true }
-      : { label: 'Go to Workout →', onPress: () => router.push('/workout'), primary: true }
+    bottom = { label: 'Go to Workout →', onPress: () => router.push('/workout'), primary: true }
   } else if (status === 'completed') {
     bottom = { label: isClaiming ? 'Claiming...' : 'Claim Reward →', onPress: handleClaim, primary: true, disabled: isClaiming }
   } else if (status === 'failed') {
@@ -366,23 +364,30 @@ export default function ChallengeDetailScreen() {
           </View>
         )}
 
-        {/* Bottom action */}
-        <TouchableOpacity
-          style={[
-            bottom.primary ? s.actionPrimary : s.actionGhost,
-            bottom.disabled && (bottom.primary ? s.actionPrimaryDisabled : s.actionGhostDisabled),
-          ]}
-          onPress={bottom.onPress}
-          disabled={bottom.disabled}
-          activeOpacity={0.85}
-        >
-          <Text style={[
-            bottom.primary ? s.actionPrimaryText : s.actionGhostText,
-            bottom.disabled && s.actionDisabledText,
-          ]}>
-            {bottom.label}
-          </Text>
-        </TouchableOpacity>
+        {/* Bottom action / today-done state badge */}
+        {status === 'active' && todayMet ? (
+          <View style={s.todayDoneBadge}>
+            <Text style={s.todayDoneCheck}>✓</Text>
+            <Text style={s.todayDoneText}>Today&apos;s goal done</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              bottom.primary ? s.actionPrimary : s.actionGhost,
+              bottom.disabled && (bottom.primary ? s.actionPrimaryDisabled : s.actionGhostDisabled),
+            ]}
+            onPress={bottom.onPress}
+            disabled={bottom.disabled}
+            activeOpacity={0.85}
+          >
+            <Text style={[
+              bottom.primary ? s.actionPrimaryText : s.actionGhostText,
+              bottom.disabled && s.actionDisabledText,
+            ]}>
+              {bottom.label}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Claim success modal */}
@@ -579,6 +584,11 @@ const s = StyleSheet.create({
   auditLabel: { fontSize: 11, color: C.sub, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
   auditValue: { fontSize: 12, color: C.text, fontWeight: '600', flexShrink: 1, marginLeft: 12, textAlign: 'right' },
   auditLink:  { color: C.amber },
+
+  // Today's-goal-done state badge (replaces bottom action while goal is met)
+  todayDoneBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(217,119,6,0.10)', borderWidth: 1.5, borderColor: 'rgba(217,119,6,0.30)', borderRadius: 14, paddingVertical: 16, marginTop: 8 },
+  todayDoneCheck: { fontSize: 16, color: C.amber, fontWeight: '900' },
+  todayDoneText:  { fontSize: 15, color: C.amber, fontWeight: '800', letterSpacing: 0.3 },
 
   // Bottom action
   actionPrimary:         { backgroundColor: C.amber2, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 8, shadowColor: C.amber, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 6 },

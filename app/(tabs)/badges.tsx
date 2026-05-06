@@ -69,6 +69,7 @@ export default function BadgesScreen() {
   })
   const earned = badges.filter(b => b.earned).length
   const total  = badges.length
+  const mintableCount = badges.filter(b => b.earned && !b.mintedAt).length
 
   const handleMint = async (badgeId: string) => {
     if (!address || !publicKey) return
@@ -160,6 +161,9 @@ export default function BadgesScreen() {
           <View style={s.statBox}>
             <Text style={s.statVal}>{earned}</Text>
             <Text style={s.statLbl}>Earned</Text>
+            {mintableCount > 0 && (
+              <Text style={s.statReady}>{mintableCount} to claim</Text>
+            )}
           </View>
           <View style={s.statDivider}/>
           <View style={s.statBox}>
@@ -309,10 +313,11 @@ const s = StyleSheet.create({
   walletDot:           { width: 7, height: 7, borderRadius: 4, backgroundColor: C.amber2 },
   walletConnectedText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 
-  statsRow:    { flexDirection: 'row', backgroundColor: C.card, borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1.5, borderColor: C.line, alignItems: 'center' },
+  statsRow:    { flexDirection: 'row', backgroundColor: C.card, borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1.5, borderColor: C.line, alignItems: 'flex-start' },
   statBox:     { flex: 1, alignItems: 'center' },
   statVal:     { fontSize: 22, fontWeight: '900', color: C.text, marginBottom: 2 },
   statLbl:     { fontSize: 9, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase' },
+  statReady:   { fontSize: 9, color: C.amber, fontWeight: '700', marginTop: 4, letterSpacing: 0.3 },
   statDivider: { width: 1, height: 32, backgroundColor: C.line },
 
   walletCard:      { backgroundColor: C.dark, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },

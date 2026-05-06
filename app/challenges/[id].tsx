@@ -256,7 +256,7 @@ export default function ChallengeDetailScreen() {
             <View style={[s.reqRow, s.reqRowLast]}>
               <Text style={s.reqDot}>•</Text>
               <Text style={s.reqText}>
-                Mint fee: {(catalog.mintFeeLamports / 1_000_000_000).toFixed(3)} SOL (charged on claim)
+                Reward fee: {(catalog.mintFeeLamports / 1_000_000_000).toFixed(3)} SOL (charged on claim)
               </Text>
             </View>
           </View>

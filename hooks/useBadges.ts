@@ -35,8 +35,8 @@ const NFT_DEFAULTS: BadgeNFTMetadata = {
 
 export const ALL_BADGES: Omit<Badge, 'earned' | 'earnedAt' | 'mintedAt' | 'nftMint'>[] = [
   // Challenge Quest Completion (2)
-  { id: 'challenge_squat_3day', questId: 'three_day_challenger', category: 'challenge', emoji: '🎯', name: 'Squat 3-Day Challenger', desc: 'Complete the 3-Day Squat Quest', pts: 0, rarity: 'Uncommon', nft: { ...NFT_DEFAULTS, uri: 'https://kinlog.app/nft/challenge_squat_3day.json', mintFeeSOL: 0 } },
-  { id: 'challenge_squat_7day', questId: 'seven_day_warrior',    category: 'challenge', emoji: '🏆', name: 'Squat 7-Day Warrior',    desc: 'Complete the 7-Day Squat Quest', pts: 0, rarity: 'Rare',     nft: { ...NFT_DEFAULTS, uri: 'https://kinlog.app/nft/challenge_squat_7day.json', mintFeeSOL: 0 } },
+  { id: 'challenge_squat_3day', questId: 'three_day_challenger', category: 'challenge', emoji: '🎯', name: '3-Day Challenger (Squat)', desc: 'Complete the 3-Day Squat Quest', pts: 0, rarity: 'Uncommon', nft: { ...NFT_DEFAULTS, uri: 'https://kinlog.app/nft/challenge_squat_3day.json', mintFeeSOL: 0 } },
+  { id: 'challenge_squat_7day', questId: 'seven_day_warrior',    category: 'challenge', emoji: '🏆', name: '7-Day Warrior (Squat)',    desc: 'Complete the 7-Day Squat Quest', pts: 0, rarity: 'Rare',     nft: { ...NFT_DEFAULTS, uri: 'https://kinlog.app/nft/challenge_squat_7day.json', mintFeeSOL: 0 } },
 
   // Squat Milestones (14)
   { id: 'squats_30',    category: 'squats',  emoji: '💪', name: 'First Set',       desc: 'Complete 30 squats',      pts: 100,  rarity: 'Common',    nft: { ...NFT_DEFAULTS, uri: 'https://kinlog.app/nft/squats_30.json'    } },

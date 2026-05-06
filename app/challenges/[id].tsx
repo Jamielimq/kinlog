@@ -41,7 +41,15 @@ interface DayCell {
 
 function shortenSig(sig: string): string {
   if (!sig || sig.length < 12) return sig
-  return `${sig.slice(0, 6)}...${sig.slice(-4)}`
+  return `${sig.slice(0, 4)}...${sig.slice(-4)}`
+}
+
+function formatLongDate(ms: number): string {
+  return new Date(ms).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 }
 
 function startOfLocalDay(ms: number): number {
@@ -63,6 +71,7 @@ export default function ChallengeDetailScreen() {
   const { claimChallengeReward, isClaiming } = useClaimChallengeReward()
 
   const [claimResult, setClaimResult] = useState<{ tx: string; points: number } | null>(null)
+  const [verifyExpanded, setVerifyExpanded] = useState(false)
 
   const view = challenges.find(c => c.catalog.id === id)
 
@@ -319,31 +328,41 @@ export default function ChallengeDetailScreen() {
           </View>
         )}
 
-        {/* On-Chain Audit */}
+        {/* Verified on Solana (expandable) */}
         {instance && (
           <View style={s.section}>
-            <Text style={s.sectionTitle}>On-Chain Audit</Text>
-            <View style={s.auditCard}>
-              <AuditRow label="Started" value={new Date(instance.startedAt).toLocaleDateString()} />
-              <AuditRow
-                label="Start Tx"
-                value={shortenSig(instance.startTxSignature)}
-                onPress={() => openSolscan(instance.startTxSignature)}
-              />
-              <AuditRow label="Memo" value={instance.startMemo} mono />
-              {instance.claimedAt ? (
-                <>
-                  <AuditRow label="Claimed" value={new Date(instance.claimedAt).toLocaleDateString()} />
-                  {instance.claimTxSignature ? (
-                    <AuditRow
-                      label="Claim Tx"
-                      value={shortenSig(instance.claimTxSignature)}
-                      onPress={() => openSolscan(instance.claimTxSignature!)}
-                    />
-                  ) : null}
-                </>
-              ) : null}
-            </View>
+            <TouchableOpacity
+              style={s.verifiedBadge}
+              onPress={() => setVerifyExpanded(v => !v)}
+              activeOpacity={0.85}
+            >
+              <Text style={s.verifiedCheck}>✓</Text>
+              <Text style={s.verifiedText}>Verified on Solana</Text>
+              <Text style={s.verifiedChevron}>{verifyExpanded ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {verifyExpanded && (
+              <View style={s.verifiedDetails}>
+                <AuditRow label="Started" value={formatLongDate(instance.startedAt)} />
+                <AuditRow
+                  label="Transaction"
+                  value={shortenSig(instance.startTxSignature)}
+                  onPress={() => openSolscan(instance.startTxSignature)}
+                />
+                {instance.claimedAt ? (
+                  <>
+                    <AuditRow label="Claimed" value={formatLongDate(instance.claimedAt)} />
+                    {instance.claimTxSignature ? (
+                      <AuditRow
+                        label="Claim Tx"
+                        value={shortenSig(instance.claimTxSignature)}
+                        onPress={() => openSolscan(instance.claimTxSignature!)}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+                <Text style={s.verifiedFooter}>Recorded immutably on-chain</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -458,19 +477,17 @@ function LegendItem({ color, borderColor, label }: { color: string; borderColor?
 function AuditRow({
   label,
   value,
-  mono,
   onPress,
 }: {
   label: string
   value: string
-  mono?: boolean
   onPress?: () => void
 }) {
   const Wrap: any = onPress ? TouchableOpacity : View
   return (
     <Wrap style={s.auditRow} onPress={onPress} activeOpacity={0.7}>
       <Text style={s.auditLabel}>{label}</Text>
-      <Text style={[s.auditValue, mono && s.auditMono, onPress && s.auditLink]} numberOfLines={1}>
+      <Text style={[s.auditValue, onPress && s.auditLink]} numberOfLines={1}>
         {value}{onPress ? '  ↗' : ''}
       </Text>
     </Wrap>
@@ -549,12 +566,18 @@ const s = StyleSheet.create({
   todayNote:        { fontSize: 11, color: C.sub },
   daysLeftHint:     { fontSize: 11, color: C.muted, marginTop: 8, textAlign: 'center' },
 
-  // Audit
-  auditCard:  { backgroundColor: C.card, borderRadius: 16, borderWidth: 1.5, borderColor: C.line, paddingHorizontal: 14, paddingVertical: 4 },
+  // Verified on Solana badge
+  verifiedBadge:    { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: C.dark, borderRadius: 100, paddingHorizontal: 12, paddingVertical: 7, gap: 8 },
+  verifiedCheck:    { fontSize: 13, color: C.green, fontWeight: '900' },
+  verifiedText:     { fontSize: 12, color: '#fff', fontWeight: '700' },
+  verifiedChevron:  { fontSize: 9, color: 'rgba(255,255,255,0.6)', marginLeft: 2 },
+  verifiedDetails:  { marginTop: 12, backgroundColor: C.card, borderRadius: 16, borderWidth: 1.5, borderColor: C.line, paddingHorizontal: 14, paddingVertical: 4 },
+  verifiedFooter:   { fontSize: 10, color: C.muted, textAlign: 'center', paddingVertical: 12, fontStyle: 'italic' },
+
+  // Audit row (used inside verifiedDetails)
   auditRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: C.line },
   auditLabel: { fontSize: 11, color: C.sub, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
   auditValue: { fontSize: 12, color: C.text, fontWeight: '600', flexShrink: 1, marginLeft: 12, textAlign: 'right' },
-  auditMono:  { fontSize: 10, color: C.sub },
   auditLink:  { color: C.amber },
 
   // Bottom action

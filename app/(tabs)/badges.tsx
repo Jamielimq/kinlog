@@ -58,13 +58,15 @@ export default function BadgesScreen() {
     if (b.earned && !b.mintedAt) return 1  // Mintable
     return 2                                // Locked
   }
-  const filtered = activeTab === 'all'
-    ? [...badges].sort((a, b) => {
-        const rankDiff = getSortRank(a) - getSortRank(b)
-        if (rankDiff !== 0) return rankDiff
-        return (categoryOrder[a.category] ?? 9) - (categoryOrder[b.category] ?? 9)
-      })
-    : badges.filter(b => b.category === activeTab)
+  const filtered = (
+    activeTab === 'all'
+      ? [...badges]
+      : badges.filter(b => b.category === activeTab)
+  ).sort((a, b) => {
+    const rankDiff = getSortRank(a) - getSortRank(b)
+    if (rankDiff !== 0) return rankDiff
+    return (categoryOrder[a.category] ?? 9) - (categoryOrder[b.category] ?? 9)
+  })
   const earned = badges.filter(b => b.earned).length
   const total  = badges.length
 

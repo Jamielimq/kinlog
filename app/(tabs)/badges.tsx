@@ -233,7 +233,7 @@ export default function BadgesScreen() {
                   activeOpacity={0.8}
                 >
                   <Text style={s.mintBtnText}>
-                    {minting === b.id ? 'Claiming...' : 'Claim Points'}
+                    {minting === b.id ? 'Claiming...' : 'Claim now'}
                   </Text>
                 </TouchableOpacity>
               )}

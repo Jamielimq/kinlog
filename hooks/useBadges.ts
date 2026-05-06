@@ -1,6 +1,6 @@
 import { getApp } from '@react-native-firebase/app';
 import { collection, FirebaseFirestoreTypes, getFirestore, onSnapshot } from '@react-native-firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export interface BadgeNFTMetadata {
   symbol: string;
@@ -23,6 +23,7 @@ export interface Badge {
   earnedAt?: number;
   mintedAt?: number;
   nftMint?: string; // on-chain mint address
+  instanceCount?: number; // total claimed quest instances for this badge's questId; undefined for non-challenge badges
 }
 
 const NFT_DEFAULTS: BadgeNFTMetadata = {
@@ -76,46 +77,71 @@ export const ALL_BADGES: Omit<Badge, 'earned' | 'earnedAt' | 'mintedAt' | 'nftMi
   { id: 'skr_staker',   category: 'special', emoji: '🔮', name: 'SKR Staker',      desc: 'Staking 1+ SKR tokens',        pts: 2000, rarity: 'Legendary', nft: { ...NFT_DEFAULTS, uri: 'https://kinlog.app/nft/skr_staker.json'    } },
 ];
 
+type EarnedEntry = { earnedAt: number; mintedAt?: number; nftMint?: string };
+
 export function useBadges(address: string | null) {
-  const [badges, setBadges] = useState<Badge[]>(
-    ALL_BADGES.map(b => ({ ...b, earned: false }))
-  );
+  const [earnedMap, setEarnedMap] = useState<Record<string, EarnedEntry>>({});
+  const [instanceCounts, setInstanceCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
+  // Subscription 1: badges/{badgeId} — earned/minted state
   useEffect(() => {
     if (!address) {
-      setBadges(ALL_BADGES.map(b => ({ ...b, earned: false })));
+      setEarnedMap({});
       setLoading(false);
       return;
     }
-
     const db = getFirestore(getApp());
     const badgesRef = collection(db, 'users', address, 'badges');
-
-    const unsubscribe = onSnapshot(badgesRef, (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
-      const earnedMap: Record<string, { earnedAt: number; mintedAt?: number; nftMint?: string }> = {};
-      snapshot.docs.forEach(d => {
+    const unsub = onSnapshot(badgesRef, (snap: FirebaseFirestoreTypes.QuerySnapshot) => {
+      const map: Record<string, EarnedEntry> = {};
+      snap.docs.forEach(d => {
         if (d.data().earned) {
-          earnedMap[d.id] = {
+          map[d.id] = {
             earnedAt: d.data().earnedAt ?? 0,
             mintedAt: d.data().mintedAt,
             nftMint: d.data().nftMint,
           };
         }
       });
-
-      setBadges(ALL_BADGES.map(b => ({
-        ...b,
-        earned: !!earnedMap[b.id],
-        earnedAt: earnedMap[b.id]?.earnedAt,
-        mintedAt: earnedMap[b.id]?.mintedAt,
-        nftMint: earnedMap[b.id]?.nftMint,
-      })));
+      setEarnedMap(map);
       setLoading(false);
     });
-
-    return unsubscribe;
+    return unsub;
   }, [address]);
+
+  // Subscription 2: userChallenges — derive claimed-instance count per challengeId
+  useEffect(() => {
+    if (!address) {
+      setInstanceCounts({});
+      return;
+    }
+    const db = getFirestore(getApp());
+    const ref = collection(db, 'users', address, 'userChallenges');
+    const unsub = onSnapshot(ref, (snap: FirebaseFirestoreTypes.QuerySnapshot) => {
+      const counts: Record<string, number> = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.status === 'claimed') {
+          counts[data.challengeId] = (counts[data.challengeId] ?? 0) + 1;
+        }
+      });
+      setInstanceCounts(counts);
+    });
+    return unsub;
+  }, [address]);
+
+  const badges = useMemo<Badge[]>(
+    () => ALL_BADGES.map(b => ({
+      ...b,
+      earned: !!earnedMap[b.id],
+      earnedAt: earnedMap[b.id]?.earnedAt,
+      mintedAt: earnedMap[b.id]?.mintedAt,
+      nftMint: earnedMap[b.id]?.nftMint,
+      instanceCount: b.questId ? (instanceCounts[b.questId] ?? 0) : undefined,
+    })),
+    [earnedMap, instanceCounts],
+  );
 
   return { badges, loading };
 }

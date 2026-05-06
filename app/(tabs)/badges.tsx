@@ -211,6 +211,11 @@ export default function BadgesScreen() {
               </Text>
               <View style={[s.badgeEmoji, !b.earned && s.badgeEmojiLocked]}>
                 <Text style={{ fontSize: 28, opacity: b.earned ? 1 : 0.4 }}>{b.emoji}</Text>
+                {(b.instanceCount ?? 0) >= 2 && (
+                  <View style={s.countPill}>
+                    <Text style={s.countPillText}>×{b.instanceCount}</Text>
+                  </View>
+                )}
               </View>
               <Text style={s.badgeName}>{b.name}</Text>
               <Text style={s.badgeDesc}>{b.desc}</Text>
@@ -330,6 +335,8 @@ const s = StyleSheet.create({
   rarityLabel:     { fontSize: 8, fontWeight: '800', letterSpacing: 0.8, alignSelf: 'flex-end', marginBottom: 8 },
   badgeEmoji:      { width: 60, height: 60, borderRadius: 30, backgroundColor: C.amberBg, borderWidth: 1.5, borderColor: `${C.amber}33`, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   badgeEmojiLocked:{ backgroundColor: C.bg3, borderColor: C.bg3 },
+  countPill:       { position: 'absolute', top: -6, right: -6, backgroundColor: C.dark, borderRadius: 100, paddingHorizontal: 6, paddingVertical: 2, minWidth: 22, alignItems: 'center', borderWidth: 2, borderColor: C.card },
+  countPillText:   { fontSize: 10, color: '#fff', fontWeight: '800' },
   badgeName:       { fontSize: 13, fontWeight: '800', color: C.text, marginBottom: 4, textAlign: 'center' },
   badgeDesc:       { fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 15, marginBottom: 10 },
   earnedTag:       { backgroundColor: C.amberBg, borderWidth: 1, borderColor: `${C.amber}33`, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100, marginBottom: 8 },

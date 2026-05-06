@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -202,33 +203,34 @@ export default function HomeScreen() {
                 return (
                   <TouchableOpacity
                     key={q.catalog.id}
-                    style={[s.questHero, stackStyle]}
+                    style={stackStyle}
                     onPress={() => router.push(`/challenges/${q.catalog.id}`)}
                     activeOpacity={0.85}
                   >
-                    <View style={s.questHeroStrip} />
-                    <View style={s.questHeroBody}>
-                      <View style={s.questHeadRow}>
-                        <Text style={s.questHeroLabel}>ACTIVE QUEST</Text>
-                        <View style={s.questHeroBadge}>
-                          <Text style={s.questHeroBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
+                    <LinearGradient
+                      colors={[q.catalog.nft.gradientFrom, q.catalog.nft.gradientTo] as [string, string]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={s.questCard}
+                    >
+                      <View style={s.questCardTopRow}>
+                        <Text style={s.questCardRarity}>{q.catalog.rarity.toUpperCase()}</Text>
+                        <View style={s.questCardBadge}>
+                          <Text style={s.questCardBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
                         </View>
                       </View>
-                      <Text style={s.questHeroTitle}>{q.catalog.name}</Text>
-                      <Text style={s.questHeroSub}>
-                        {q.catalog.requirementDays} days · {q.catalog.requirementDailyReps} squats/day
-                      </Text>
-                      <View style={s.questProgressBar}>
-                        <View style={[s.questProgressFill, { width: `${q.progressPct * 100}%` }]} />
+                      <Text style={s.questCardTitle}>{q.catalog.name}</Text>
+                      <View style={s.questCardProgressBar}>
+                        <View style={[s.questCardProgressFill, { width: `${q.progressPct * 100}%` }]} />
                       </View>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                        <Text style={s.questProgressNote}>
+                        <Text style={s.questCardProgressNote}>
                           Day {dayIdx} of {q.catalog.requirementDays}
                           {q.daysRemaining !== null ? ` · ${q.daysRemaining} days left` : ''}
                         </Text>
-                        <Text style={s.questProgressPct}>{Math.round(q.progressPct * 100)}%</Text>
+                        <Text style={s.questCardProgressPct}>{Math.round(q.progressPct * 100)}%</Text>
                       </View>
-                    </View>
+                    </LinearGradient>
                   </TouchableOpacity>
                 )
               })
@@ -382,18 +384,16 @@ const s = StyleSheet.create({
   questEmptySub:       { fontSize: 11, color: C.amber },
   questEmptyArrow:     { fontSize: 18, color: C.amber, fontWeight: '700' },
 
-  questHero:           { flexDirection: 'row', backgroundColor: C.card, borderRadius: 18, borderWidth: 1.5, borderColor: C.line, overflow: 'hidden' },
-  questHeroStrip:      { width: 4, backgroundColor: C.amber2 },
-  questHeroBody:       { flex: 1, padding: 16 },
-  questHeroLabel:      { fontSize: 9, color: C.muted, letterSpacing: 1.2, fontWeight: '700' },
-  questHeroBadge:      { backgroundColor: C.bg2, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
-  questHeroBadgeText:  { fontSize: 10, color: C.dark2, fontWeight: '700' },
-  questHeroTitle:      { fontSize: 17, fontWeight: '800', color: C.text, letterSpacing: -0.3, marginBottom: 2 },
-  questHeroSub:        { fontSize: 11, color: C.sub, marginBottom: 12 },
-  questProgressBar:    { height: 5, backgroundColor: C.bg3, borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
-  questProgressFill:   { height: 5, backgroundColor: C.amber2, borderRadius: 100 },
-  questProgressNote:   { fontSize: 10, color: C.muted },
-  questProgressPct:    { fontSize: 10, fontWeight: '700', color: C.amber2 },
+  questCard:               { borderRadius: 18, padding: 16, overflow: 'hidden' },
+  questCardTopRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  questCardRarity:         { fontSize: 9, color: 'rgba(255,255,255,0.85)', letterSpacing: 1.2, fontWeight: '700' },
+  questCardBadge:          { backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
+  questCardBadgeText:      { fontSize: 10, color: '#fff', fontWeight: '700' },
+  questCardTitle:          { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.3, marginBottom: 14 },
+  questCardProgressBar:    { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
+  questCardProgressFill:   { height: 5, backgroundColor: '#fff', borderRadius: 100 },
+  questCardProgressNote:   { fontSize: 10, color: 'rgba(255,255,255,0.75)' },
+  questCardProgressPct:    { fontSize: 10, fontWeight: '700', color: '#fff' },
 
   questClaim:          { backgroundColor: C.amber2, borderRadius: 18, padding: 18, shadowColor: C.amber, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
   questClaimLabel:     { fontSize: 9, color: `${C.dark}99`, letterSpacing: 1.5, fontWeight: '700' },

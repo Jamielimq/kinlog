@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useWallet } from '../../context/WalletContext'
-import { useChallenges } from '../../hooks/useChallenges'
+import { useChallenges, type ChallengeView } from '../../hooks/useChallenges'
 import { useGoals } from '../../hooks/useGoals'
 import { usePoints } from '../../hooks/usePoints'
 import { useUserStats } from '../../hooks/useUserStats'
@@ -31,6 +31,18 @@ function getActivityIcon(reason: string) {
   return '🏋️'
 }
 
+// Live calendar day index (instance.progress.dayIndex only updates on workout save).
+function liveDayIndex(q: ChallengeView): number {
+  if (!q.instance) return 0
+  return Math.max(
+    1,
+    Math.min(
+      q.catalog.requirementDays,
+      Math.floor((Date.now() - q.instance.startedAt) / 86400000) + 1,
+    ),
+  )
+}
+
 export default function HomeScreen() {
   const { publicKey, shortAddress, connecting, connect, disconnect } = useWallet()
   const address = publicKey?.toBase58() ?? null
@@ -49,29 +61,15 @@ export default function HomeScreen() {
   const formattedPoints = stats.points.toLocaleString()
   const streakDisplay = stats.currentStreak > 0 ? `${stats.currentStreak}d` : '0d'
 
-  // Quests: claim-pending first, then active by progress.
+  // Quests: claim-pending first, then active by start date (oldest = closest to deadline).
   const inProgressQuests = challenges
     .filter(c => c.instance && (c.instance.status === 'active' || c.instance.status === 'completed'))
     .sort((a, b) => {
       const ra = a.instance!.status === 'completed' ? 0 : 1
       const rb = b.instance!.status === 'completed' ? 0 : 1
       if (ra !== rb) return ra - rb
-      return b.progressPct - a.progressPct
+      return a.instance!.startedAt - b.instance!.startedAt
     })
-  const heroQuest = inProgressQuests[0] ?? null
-  const moreQuestCount = Math.max(0, inProgressQuests.length - 1)
-  const heroIsClaim = heroQuest?.instance?.status === 'completed'
-
-  // Live calendar day index (instance.progress.dayIndex only updates on workout save).
-  const heroLiveDayIndex = heroQuest
-    ? Math.max(
-        1,
-        Math.min(
-          heroQuest.catalog.requirementDays,
-          Math.floor((Date.now() - heroQuest.instance!.startedAt) / 86400000) + 1,
-        ),
-      )
-    : 0
 
   return (
     <SafeAreaView style={s.safe}>
@@ -158,7 +156,7 @@ export default function HomeScreen() {
           <View style={s.section}>
             <Text style={s.sectionTitle}>Quests</Text>
 
-            {!heroQuest ? (
+            {inProgressQuests.length === 0 ? (
               <TouchableOpacity
                 style={s.questEmpty}
                 onPress={() => router.push('/challenges')}
@@ -173,75 +171,84 @@ export default function HomeScreen() {
                 </View>
                 <Text style={s.questEmptyArrow}>→</Text>
               </TouchableOpacity>
-            ) : heroIsClaim ? (
-              <TouchableOpacity
-                style={s.questClaim}
-                onPress={() => router.push(`/challenges/${heroQuest.catalog.id}`)}
-                activeOpacity={0.85}
-              >
-                <View style={s.questHeadRow}>
-                  <Text style={s.questClaimLabel}>✓ READY TO CLAIM</Text>
-                  <View style={s.questClaimBadge}>
-                    <Text style={s.questClaimBadgeText}>🛡 {heroQuest.catalog.nft.romanNumeral}</Text>
-                  </View>
-                </View>
-                <Text style={s.questClaimTitle}>{heroQuest.catalog.name}</Text>
-                <Text style={s.questClaimReward}>
-                  Reward: +{heroQuest.catalog.bonusPoints} points
-                </Text>
-                <View style={s.questClaimCta}>
-                  <Text style={s.questClaimCtaText}>Claim Reward →</Text>
-                </View>
-              </TouchableOpacity>
             ) : (
-              <TouchableOpacity
-                style={s.questHero}
-                onPress={() => router.push(`/challenges/${heroQuest.catalog.id}`)}
-                activeOpacity={0.85}
-              >
-                <View style={s.questHeroStrip} />
-                <View style={s.questHeroBody}>
-                  <View style={s.questHeadRow}>
-                    <Text style={s.questHeroLabel}>ACTIVE QUEST</Text>
-                    <View style={s.questHeroBadge}>
-                      <Text style={s.questHeroBadgeText}>🛡 {heroQuest.catalog.nft.romanNumeral}</Text>
+              inProgressQuests.map((q, idx) => {
+                const stackStyle = { marginBottom: idx < inProgressQuests.length - 1 ? 12 : 0 }
+                if (q.instance!.status === 'completed') {
+                  return (
+                    <TouchableOpacity
+                      key={q.catalog.id}
+                      style={[s.questClaim, stackStyle]}
+                      onPress={() => router.push(`/challenges/${q.catalog.id}`)}
+                      activeOpacity={0.85}
+                    >
+                      <View style={s.questHeadRow}>
+                        <Text style={s.questClaimLabel}>✓ READY TO CLAIM</Text>
+                        <View style={s.questClaimBadge}>
+                          <Text style={s.questClaimBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
+                        </View>
+                      </View>
+                      <Text style={s.questClaimTitle}>{q.catalog.name}</Text>
+                      <Text style={s.questClaimReward}>
+                        Reward: +{q.catalog.bonusPoints} points
+                      </Text>
+                      <View style={s.questClaimCta}>
+                        <Text style={s.questClaimCtaText}>Claim Reward →</Text>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                }
+                const dayIdx = liveDayIndex(q)
+                return (
+                  <TouchableOpacity
+                    key={q.catalog.id}
+                    style={[s.questHero, stackStyle]}
+                    onPress={() => router.push(`/challenges/${q.catalog.id}`)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={s.questHeroStrip} />
+                    <View style={s.questHeroBody}>
+                      <View style={s.questHeadRow}>
+                        <Text style={s.questHeroLabel}>ACTIVE QUEST</Text>
+                        <View style={s.questHeroBadge}>
+                          <Text style={s.questHeroBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
+                        </View>
+                      </View>
+                      <Text style={s.questHeroTitle}>{q.catalog.name}</Text>
+                      <Text style={s.questHeroSub}>
+                        {q.catalog.requirementDays} days · {q.catalog.requirementDailyReps} squats/day
+                      </Text>
+                      <View style={s.questProgressBar}>
+                        <View style={[s.questProgressFill, { width: `${q.progressPct * 100}%` }]} />
+                      </View>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <Text style={s.questProgressNote}>
+                          Day {dayIdx} of {q.catalog.requirementDays}
+                          {q.daysRemaining !== null ? ` · ${q.daysRemaining} days left` : ''}
+                        </Text>
+                        <Text style={s.questProgressPct}>{Math.round(q.progressPct * 100)}%</Text>
+                      </View>
                     </View>
-                  </View>
-                  <Text style={s.questHeroTitle}>{heroQuest.catalog.name}</Text>
-                  <Text style={s.questHeroSub}>
-                    {heroQuest.catalog.requirementDays} days · {heroQuest.catalog.requirementDailyReps} squats/day
-                  </Text>
-                  <View style={s.questProgressBar}>
-                    <View style={[s.questProgressFill, { width: `${heroQuest.progressPct * 100}%` }]} />
-                  </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={s.questProgressNote}>
-                      Day {heroLiveDayIndex} of {heroQuest.catalog.requirementDays}
-                      {heroQuest.daysRemaining !== null ? ` · ${heroQuest.daysRemaining} days left` : ''}
-                    </Text>
-                    <Text style={s.questProgressPct}>{Math.round(heroQuest.progressPct * 100)}%</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
+                  </TouchableOpacity>
+                )
+              })
             )}
 
-            {inProgressQuests.length === 1 ? (
+            {inProgressQuests.length >= 3 ? (
+              <TouchableOpacity
+                style={s.questMore}
+                onPress={() => router.push('/challenges')}
+                activeOpacity={0.7}
+              >
+                <Text style={s.questMoreText}>+ View all quests →</Text>
+              </TouchableOpacity>
+            ) : inProgressQuests.length >= 1 ? (
               <TouchableOpacity
                 style={s.questMore}
                 onPress={() => router.push('/challenges')}
                 activeOpacity={0.7}
               >
                 <Text style={s.questMoreText}>+ Add another quest →</Text>
-              </TouchableOpacity>
-            ) : moreQuestCount > 0 ? (
-              <TouchableOpacity
-                style={s.questMore}
-                onPress={() => router.push('/challenges')}
-                activeOpacity={0.7}
-              >
-                <Text style={s.questMoreText}>
-                  + {moreQuestCount} more quest{moreQuestCount > 1 ? 's' : ''} in progress →
-                </Text>
               </TouchableOpacity>
             ) : null}
           </View>

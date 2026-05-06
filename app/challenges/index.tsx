@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient'
 import { router } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -223,30 +224,34 @@ function QuestCard({ cv, walletConnected, starting, onStart, onView }: QuestCard
   if (status === 'active') {
     const metCount = Object.values(instance.progress.daysLog ?? {}).filter(d => d.met).length
     return (
-      <TouchableOpacity style={s.cardBase} onPress={onView} activeOpacity={0.85}>
-        <View style={s.stripActive} />
-        <View style={s.cardBody}>
-          <View style={s.cardHead}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.statusActive}>ACTIVE</Text>
-              <Text style={s.questName}>{catalog.name}</Text>
+      <TouchableOpacity style={s.cardActiveWrap} onPress={onView} activeOpacity={0.85}>
+        <LinearGradient
+          colors={[catalog.nft.gradientFrom, catalog.nft.gradientTo] as [string, string]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.cardActive}
+        >
+          <View style={s.cardActiveTopRow}>
+            <Text style={s.cardActiveRarity}>{catalog.rarity.toUpperCase()}</Text>
+            <View style={s.cardActiveBadge}>
+              <Text style={s.cardActiveBadgeText}>🛡 {catalog.nft.romanNumeral}</Text>
             </View>
-            {badgeNeutral}
           </View>
-          <View style={s.progressBar}>
-            <View style={[s.progressFill, { width: `${progressPct * 100}%` }]} />
+          <Text style={s.cardActiveName}>{catalog.name}</Text>
+          <View style={s.cardActiveProgressBar}>
+            <View style={[s.cardActiveProgressFill, { width: `${progressPct * 100}%` }]} />
           </View>
-          <View style={s.progressMetaRow}>
-            <Text style={s.progressMeta}>
+          <View style={s.cardActiveMetaRow}>
+            <Text style={s.cardActiveMeta}>
               {metCount}/{catalog.requirementDays} days
               {cv.daysRemaining !== null ? ` · ${cv.daysRemaining} left` : ''}
             </Text>
-            <Text style={s.progressPct}>{Math.round(progressPct * 100)}%</Text>
+            <Text style={s.cardActivePct}>{Math.round(progressPct * 100)}%</Text>
           </View>
-          <View style={s.btnSecondary}>
-            <Text style={s.btnSecondaryText}>View Progress →</Text>
+          <View style={s.btnViewProgress}>
+            <Text style={s.btnViewProgressText}>View Progress →</Text>
           </View>
-        </View>
+        </LinearGradient>
       </TouchableOpacity>
     )
   }
@@ -336,7 +341,6 @@ const s = StyleSheet.create({
   cardHead:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
   cardDim:    { opacity: 0.72 },
 
-  stripActive: { width: 4, backgroundColor: C.amber2 },
   stripFailed: { width: 4, backgroundColor: C.muted },
 
   questBadge:        { backgroundColor: C.bg2, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
@@ -350,25 +354,30 @@ const s = StyleSheet.create({
   questReward:  { fontSize: 12, color: C.amber, fontWeight: '700', marginBottom: 14 },
 
   // Status labels
-  statusActive:  { fontSize: 9, color: C.amber, letterSpacing: 1.2, fontWeight: '800', marginBottom: 4 },
   statusFailed:  { fontSize: 9, color: C.muted, letterSpacing: 1.2, fontWeight: '800', marginBottom: 4 },
   statusClaimed: { fontSize: 9, color: C.sub, letterSpacing: 1.2, fontWeight: '800', marginBottom: 4 },
 
-  // Progress (active)
-  progressBar:    { height: 5, backgroundColor: C.bg3, borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
-  progressFill:   { height: 5, backgroundColor: C.amber2, borderRadius: 100 },
-  progressMetaRow:{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  progressMeta:   { fontSize: 11, color: C.sub },
-  progressPct:    { fontSize: 11, fontWeight: '800', color: C.amber2 },
+  // Active card (gradient)
+  cardActiveWrap:           { marginBottom: 12 },
+  cardActive:               { borderRadius: 18, padding: 16, overflow: 'hidden' },
+  cardActiveTopRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  cardActiveRarity:         { fontSize: 9, color: 'rgba(255,255,255,0.85)', letterSpacing: 1.2, fontWeight: '700' },
+  cardActiveBadge:          { backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
+  cardActiveBadgeText:      { fontSize: 10, color: '#fff', fontWeight: '700' },
+  cardActiveName:           { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.3, marginBottom: 14 },
+  cardActiveProgressBar:    { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
+  cardActiveProgressFill:   { height: 5, backgroundColor: '#fff', borderRadius: 100 },
+  cardActiveMetaRow:        { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  cardActiveMeta:           { fontSize: 11, color: 'rgba(255,255,255,0.75)' },
+  cardActivePct:            { fontSize: 11, fontWeight: '800', color: '#fff' },
+  btnViewProgress:          { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  btnViewProgressText:      { color: '#fff', fontSize: 14, fontWeight: '800' },
 
   // Buttons
   btnPrimary:         { backgroundColor: C.amber2, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   btnPrimaryDisabled: { backgroundColor: C.bg3 },
   btnPrimaryText:     { color: C.dark, fontSize: 14, fontWeight: '800' },
   btnDisabledText:    { color: C.muted },
-
-  btnSecondary:     { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnSecondaryText: { color: '#fff', fontSize: 14, fontWeight: '800' },
 
   btnOutline:         { borderWidth: 1.5, borderColor: C.amber2, backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   btnOutlineDisabled: { borderColor: C.line, opacity: 0.7 },

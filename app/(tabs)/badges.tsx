@@ -46,10 +46,11 @@ export default function BadgesScreen() {
 
   const hasMintable = (cat?: string) => badges.some(b => b.earned && !b.mintedAt && (cat ? b.category === cat : true))
   const TABS = [
-    { key: 'all',     label: `All (${badges.length})`,    dot: hasMintable()          },
-    { key: 'squats',  label: `Squats (${badges.filter(b => b.category === 'squats').length})`,  dot: hasMintable('squats')  },
-    { key: 'streak',  label: `Streak (${badges.filter(b => b.category === 'streak').length})`,  dot: hasMintable('streak')  },
-    { key: 'special', label: `Special (${badges.filter(b => b.category === 'special').length})`, dot: hasMintable('special') },
+    { key: 'all',       label: `All (${badges.length})`,    dot: hasMintable()          },
+    { key: 'challenge', label: `Challenge (${badges.filter(b => b.category === 'challenge').length})`, dot: hasMintable('challenge') },
+    { key: 'squats',    label: `Squats (${badges.filter(b => b.category === 'squats').length})`,  dot: hasMintable('squats')  },
+    { key: 'streak',    label: `Streak (${badges.filter(b => b.category === 'streak').length})`,  dot: hasMintable('streak')  },
+    { key: 'special',   label: `Special (${badges.filter(b => b.category === 'special').length})`, dot: hasMintable('special') },
   ]
   const categoryOrder = { challenge: 0, squats: 1, streak: 2, special: 3 }
   const getSortRank = (b: any) => {

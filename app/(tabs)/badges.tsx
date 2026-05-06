@@ -51,7 +51,7 @@ export default function BadgesScreen() {
     { key: 'streak',  label: `Streak (${badges.filter(b => b.category === 'streak').length})`,  dot: hasMintable('streak')  },
     { key: 'special', label: `Special (${badges.filter(b => b.category === 'special').length})`, dot: hasMintable('special') },
   ]
-  const categoryOrder = { squats: 0, streak: 1, special: 2 }
+  const categoryOrder = { challenge: 0, squats: 1, streak: 2, special: 3 }
   const getSortRank = (b: any) => {
     if (b.earned && b.mintedAt) return 0   // Minted
     if (b.earned && !b.mintedAt) return 1  // Mintable

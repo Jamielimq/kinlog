@@ -47,7 +47,8 @@
           "cameraPermission": "Camera access is required to analyze your workout movements."
         }
       ],
-      "react-native-vision-camera"
+      "react-native-vision-camera",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

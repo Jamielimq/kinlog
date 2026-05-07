@@ -22,7 +22,7 @@ function getActivityIcon(reason: string) {
 }
 
 export default function ProfileScreen() {
-  const { publicKey, shortAddress, connecting, connect, disconnect } = useWallet()
+  const { publicKey, shortAddress, connecting, restoring, connect, disconnect } = useWallet()
   const address = publicKey?.toBase58() ?? null
   const { stats } = useUserStats(address)
   const { badges } = useBadges(address)
@@ -58,8 +58,8 @@ export default function ProfileScreen() {
               <Text style={s.walletConnectedText}>{shortAddress}</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={s.walletBtn} onPress={connect} disabled={connecting}>
-              <Text style={s.walletBtnText}>{connecting ? 'Connecting...' : 'Connect Wallet'}</Text>
+            <TouchableOpacity style={s.walletBtn} onPress={connect} disabled={connecting || restoring}>
+              <Text style={s.walletBtnText}>{connecting || restoring ? 'Connecting...' : 'Connect Wallet'}</Text>
             </TouchableOpacity>
           )}
         </View>

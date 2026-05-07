@@ -45,7 +45,7 @@ function liveDayIndex(q: ChallengeView): number {
 }
 
 export default function HomeScreen() {
-  const { publicKey, shortAddress, connecting, connect, disconnect } = useWallet()
+  const { publicKey, shortAddress, connecting, restoring, connect, disconnect } = useWallet()
   const address = publicKey?.toBase58() ?? null
   const { history } = usePoints(address)
   const { goals } = useGoals(address)
@@ -88,8 +88,8 @@ export default function HomeScreen() {
               <Text style={s.walletConnectedText}>{shortAddress}</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={s.walletBtn} onPress={connect} disabled={connecting}>
-              <Text style={s.walletBtnText}>{connecting ? 'Connecting...' : 'Connect Wallet'}</Text>
+            <TouchableOpacity style={s.walletBtn} onPress={connect} disabled={connecting || restoring}>
+              <Text style={s.walletBtnText}>{connecting || restoring ? 'Connecting...' : 'Connect Wallet'}</Text>
             </TouchableOpacity>
           )}
         </View>

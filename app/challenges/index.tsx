@@ -25,7 +25,7 @@ function tierOf(c: ChallengeView): number {
 export default function ChallengesScreen() {
   const { publicKey, connecting, connect } = useWallet()
   const address = publicKey?.toBase58() ?? null
-  const { challenges, loading } = useChallenges(address)
+  const { challenges, instances, loading } = useChallenges(address)
   const { startChallenge } = useStartChallenge()
   const [startingId, setStartingId] = useState<string | null>(null)
 
@@ -41,15 +41,13 @@ export default function ChallengesScreen() {
   )
 
   const summary = useMemo(() => {
-    let inProg = 0, claimed = 0, available = 0
-    for (const c of challenges) {
-      const st = c.effectiveStatus
-      if (st === 'active' || st === 'completed') inProg++
-      else if (st === 'claimed') claimed++
-      else available++ // no instance or failed
-    }
-    return { inProg, claimed, available }
-  }, [challenges])
+    const active = challenges.filter(c => c.effectiveStatus === 'active').length
+    const completed = instances.filter(i => i.status === 'claimed').length
+    const available = challenges.filter(
+      c => !c.instance || c.effectiveStatus === 'failed',
+    ).length
+    return { active, completed, available }
+  }, [challenges, instances])
 
   const totalRewards = useMemo(
     () => challenges.reduce((sum, c) => sum + c.catalog.bonusPoints, 0),
@@ -119,9 +117,9 @@ export default function ChallengesScreen() {
         ) : (
           <View style={s.summary}>
             <Text style={s.summaryText}>
-              <Text style={s.summaryNum}>{summary.inProg}</Text> active
+              <Text style={s.summaryNum}>{summary.active}</Text> active
               <Text style={s.summarySep}>  ·  </Text>
-              <Text style={s.summaryNum}>{summary.claimed}</Text> claimed
+              <Text style={s.summaryNum}>{summary.completed}</Text> completed
               <Text style={s.summarySep}>  ·  </Text>
               <Text style={s.summaryNum}>{summary.available}</Text> available
             </Text>

@@ -1,7 +1,12 @@
 // Challenge progress updater — called from saveWorkout after a successful
-// rep save. Walks every active challenge instance, marks failure on
-// expiration / missed days, otherwise records today's reps. Status
-// transitions follow firestore.rules: active -> {active, completed, failed}.
+// rep save. Walks every active challenge instance, marks failure when the
+// window has elapsed without all required days met, otherwise records
+// today's reps. Status transitions follow firestore.rules:
+// active -> {active, completed, failed}.
+//
+// Missed days within the window stay 'active' — judgment fires only at
+// window end. View-layer effective status (useChallenges) handles idle
+// expiration when no further workout triggers a re-evaluation.
 //
 // Date keys are local-day "YYYY-MM-DD" so they line up with the user's
 // "did I work out today?" mental model and getTodayStart() in workout.tsx.
@@ -70,19 +75,6 @@ function computeOutcome(
       progress: { dayIndex, daysLog, lastProgressDate: todayKey },
       failedAt: now,
     };
-  }
-
-  // (c) Missed-day check: every day from startDay..yesterday must be met.
-  const startDayMs = localDayStartMs(instance.startedAt);
-  const todayDayMs = localDayStartMs(now);
-  for (let m = startDayMs; m < todayDayMs; m += DAY_MS) {
-    if (!daysLog[localDateKey(m)]?.met) {
-      return {
-        status: 'failed',
-        progress: { dayIndex, daysLog, lastProgressDate: todayKey },
-        failedAt: now,
-      };
-    }
   }
 
   // (d) Record today (absolute overwrite — caller passes the cumulative).

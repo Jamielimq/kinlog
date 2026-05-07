@@ -13,9 +13,10 @@ import {
   limit,
   orderBy,
   query,
+  setDoc,
   where,
 } from '@react-native-firebase/firestore';
-import { localDateKey } from './challengeProgress';
+import { elapsedDays, localDateKey } from './challengeProgress';
 import {
   Connection,
   PublicKey,
@@ -66,8 +67,29 @@ export function useStartChallenge() {
         let nextSequence = 1;
         if (!lastSnap.empty) {
           const last = lastSnap.docs[0].data() as UserChallengeInstance;
-          if (last.status === 'active' || last.status === 'completed') {
+          const lastActiveExpired =
+            last.status === 'active' &&
+            elapsedDays(last.startedAt, Date.now()) >
+              last.requirementSnapshot.requirementDays - 1;
+          if (
+            (last.status === 'active' && !lastActiveExpired) ||
+            last.status === 'completed'
+          ) {
             throw new Error('This challenge is already in progress.');
+          }
+          if (lastActiveExpired) {
+            // Best-effort: mark the idle-expired instance as failed before
+            // creating a new one. View layer already surfaces it as failed;
+            // failure here just leaves the old doc 'active' in storage.
+            try {
+              await setDoc(
+                doc(db, 'users', address, 'userChallenges', lastSnap.docs[0].id),
+                { status: 'failed', failedAt: Date.now() },
+                { merge: true },
+              );
+            } catch (e) {
+              console.warn('Failed to mark expired instance:', e);
+            }
           }
           nextSequence = (last.sequence ?? 0) + 1;
         }

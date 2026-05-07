@@ -15,7 +15,7 @@ const C = {
 }
 
 function tierOf(c: ChallengeView): number {
-  const st = c.instance?.status
+  const st = c.effectiveStatus
   if (st === 'completed') return 0 // claim-pending
   if (st === 'active')    return 1
   if (st === 'failed')    return 2 // retry-eligible, ranked above fresh
@@ -32,7 +32,7 @@ export default function ChallengesScreen() {
   const sorted = useMemo(
     () =>
       challenges
-        .filter(c => c.instance?.status !== 'claimed')
+        .filter(c => c.effectiveStatus !== 'claimed')
         .sort((a, b) => {
           const t = tierOf(a) - tierOf(b)
           return t !== 0 ? t : a.catalog.requirementDays - b.catalog.requirementDays
@@ -43,7 +43,7 @@ export default function ChallengesScreen() {
   const summary = useMemo(() => {
     let inProg = 0, claimed = 0, available = 0
     for (const c of challenges) {
-      const st = c.instance?.status
+      const st = c.effectiveStatus
       if (st === 'active' || st === 'completed') inProg++
       else if (st === 'claimed') claimed++
       else available++ // no instance or failed
@@ -165,7 +165,7 @@ interface QuestCardProps {
 
 function QuestCard({ cv, walletConnected, starting, onStart, onView }: QuestCardProps) {
   const { catalog, instance, progressPct } = cv
-  const status = instance?.status
+  const status = cv.effectiveStatus
 
   const badgeNeutral = (
     <View style={s.questBadge}>

@@ -139,8 +139,8 @@ export default function ChallengeDetailScreen() {
     )
   }
 
-  const { catalog, instance, progressPct, daysRemaining } = view
-  const status = instance?.status
+  const { catalog, instance, effectiveStatus, progressPct, daysRemaining } = view
+  const status = effectiveStatus
   const rarityColor = RARITY_COLOR[catalog.rarity] ?? C.sub
 
   // Day grid layout — dynamic cell size for clean rows.

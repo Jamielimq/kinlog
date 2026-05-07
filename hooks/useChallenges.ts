@@ -9,6 +9,7 @@ import {
   where,
 } from '@react-native-firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
+import { elapsedDays } from './challengeProgress';
 
 // ───────────────────────────────────────────────────────────────
 // Catalog: challenges/{challengeId}
@@ -83,6 +84,11 @@ export interface UserChallengeInstance {
 export interface ChallengeView {
   catalog: ChallengeCatalog;
   instance: UserChallengeInstance | null;
+  // View-layer status overlay: 'active' instances past their window
+  // surface as 'failed' here (idle expiration). Firestore status remains
+  // the source of truth and re-syncs on the next workout. Writes that
+  // gate on status (claim) MUST read instance.status, not this.
+  effectiveStatus: UserChallengeStatus | null;
   isStartable: boolean;
   daysRemaining: number | null;
   progressPct: number; // 0..1
@@ -99,6 +105,22 @@ function pickCurrentInstance(
     const r = rank(b.status) - rank(a.status);
     return r !== 0 ? r : b.sequence - a.sequence;
   })[0];
+}
+
+// Idle-expiration overlay: 'active' instances that have outlived their
+// window surface as 'failed' to the UI. We do NOT promote 'active' to
+// 'completed' even if metCount >= req — that path is essentially
+// unreachable after (f), and showing Claim while Firestore is 'active'
+// would let users click into a guard-rejected claim.
+function deriveEffectiveStatus(
+  instance: UserChallengeInstance | null,
+  now: number,
+): UserChallengeStatus | null {
+  if (!instance) return null;
+  if (instance.status !== 'active') return instance.status;
+  const req = instance.requirementSnapshot.requirementDays;
+  if (elapsedDays(instance.startedAt, now) <= req - 1) return 'active';
+  return 'failed';
 }
 
 export function useChallenges(address: string | null) {
@@ -149,11 +171,13 @@ export function useChallenges(address: string | null) {
   }, [address]);
 
   const challenges = useMemo<ChallengeView[]>(() => {
+    const now = Date.now();
     return catalog.map(c => {
       const forThis = instances.filter(i => i.challengeId === c.id);
       const instance = pickCurrentInstance(forThis);
+      const effectiveStatus = deriveEffectiveStatus(instance, now);
       const isStartable =
-        !instance || instance.status === 'claimed' || instance.status === 'failed';
+        !instance || effectiveStatus === 'claimed' || effectiveStatus === 'failed';
 
       let progressPct = 0;
       let daysRemaining: number | null = null;
@@ -166,7 +190,7 @@ export function useChallenges(address: string | null) {
         daysRemaining = Math.max(0, req - metCount);
       }
 
-      return { catalog: c, instance, isStartable, daysRemaining, progressPct };
+      return { catalog: c, instance, effectiveStatus, isStartable, daysRemaining, progressPct };
     });
   }, [catalog, instances]);
 

@@ -43,7 +43,7 @@ function localDayStartMs(ms: number): number {
   return d.getTime();
 }
 
-function elapsedDays(startMs: number, nowMs: number): number {
+export function elapsedDays(startMs: number, nowMs: number): number {
   return Math.floor((localDayStartMs(nowMs) - localDayStartMs(startMs)) / DAY_MS);
 }
 

@@ -64,10 +64,10 @@ export default function HomeScreen() {
 
   // Quests: claim-pending first, then active by start date (oldest = closest to deadline).
   const inProgressQuests = challenges
-    .filter(c => c.instance && (c.instance.status === 'active' || c.instance.status === 'completed'))
+    .filter(c => c.effectiveStatus === 'active' || c.effectiveStatus === 'completed')
     .sort((a, b) => {
-      const ra = a.instance!.status === 'completed' ? 0 : 1
-      const rb = b.instance!.status === 'completed' ? 0 : 1
+      const ra = a.effectiveStatus === 'completed' ? 0 : 1
+      const rb = b.effectiveStatus === 'completed' ? 0 : 1
       if (ra !== rb) return ra - rb
       return a.instance!.startedAt - b.instance!.startedAt
     })

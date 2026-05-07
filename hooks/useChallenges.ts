@@ -196,6 +196,7 @@ export function useChallenges(address: string | null) {
 
   return {
     challenges,
+    instances,
     loading: catalogLoading || (!!address && instancesLoading),
   };
 }

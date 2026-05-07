@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useWallet } from '../../context/WalletContext'
-import { useChallenges, type ChallengeView } from '../../hooks/useChallenges'
+import { useChallenges, type ChallengeCatalog, type ChallengeView } from '../../hooks/useChallenges'
 import { useStartChallenge } from '../../hooks/useStartChallenge'
 
 const C = {
@@ -14,13 +14,14 @@ const C = {
   text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
 }
 
-function tierOf(c: ChallengeView): number {
-  const st = c.effectiveStatus
-  if (st === 'completed') return 0 // claim-pending
-  if (st === 'active')    return 1
-  if (st === 'failed')    return 2 // retry-eligible, ranked above fresh
-  return 3 // available (no instance)
+// Per-catalog gradient (Phase 2C deep tones). Wrapper retained as the
+// single seam for any future rarity-driven override.
+function gradientForCatalog(catalog: ChallengeCatalog): [string, string] {
+  return [catalog.nft.gradientFrom, catalog.nft.gradientTo]
 }
+
+const byReqDays = (a: ChallengeView, b: ChallengeView) =>
+  a.catalog.requirementDays - b.catalog.requirementDays
 
 export default function ChallengesScreen() {
   const { publicKey, connecting, connect } = useWallet()
@@ -29,13 +30,23 @@ export default function ChallengesScreen() {
   const { startChallenge } = useStartChallenge()
   const [startingId, setStartingId] = useState<string | null>(null)
 
-  const sorted = useMemo(
+  const claimReady = useMemo(
+    () => challenges.filter(c => c.effectiveStatus === 'completed').sort(byReqDays),
+    [challenges],
+  )
+  const activeList = useMemo(
+    () => challenges.filter(c => c.effectiveStatus === 'active').sort(byReqDays),
+    [challenges],
+  )
+  const availableList = useMemo(
     () =>
       challenges
-        .filter(c => c.effectiveStatus !== 'claimed')
+        .filter(c => !c.instance || c.effectiveStatus === 'failed')
         .sort((a, b) => {
-          const t = tierOf(a) - tierOf(b)
-          return t !== 0 ? t : a.catalog.requirementDays - b.catalog.requirementDays
+          // Failed first (retry-eligible), no-instance after.
+          const af = a.effectiveStatus === 'failed' ? 0 : 1
+          const bf = b.effectiveStatus === 'failed' ? 0 : 1
+          return af !== bf ? af - bf : byReqDays(a, b)
         }),
     [challenges],
   )
@@ -65,6 +76,17 @@ export default function ChallengesScreen() {
       setStartingId(null)
     }
   }
+
+  const renderCard = (cv: ChallengeView) => (
+    <QuestCard
+      key={cv.catalog.id}
+      cv={cv}
+      walletConnected={!!publicKey}
+      starting={startingId === cv.catalog.id}
+      onStart={() => handleStart(cv)}
+      onView={() => router.push(`/challenges/${cv.catalog.id}`)}
+    />
+  )
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -137,16 +159,26 @@ export default function ChallengesScreen() {
             <Text style={s.emptyText}>No quests available right now</Text>
           </View>
         ) : (
-          sorted.map(cv => (
-            <QuestCard
-              key={cv.catalog.id}
-              cv={cv}
-              walletConnected={!!publicKey}
-              starting={startingId === cv.catalog.id}
-              onStart={() => handleStart(cv)}
-              onView={() => router.push(`/challenges/${cv.catalog.id}`)}
-            />
-          ))
+          <>
+            {claimReady.length > 0 && (
+              <>
+                <Text style={s.sectionHeader}>CLAIM READY</Text>
+                {claimReady.map(renderCard)}
+              </>
+            )}
+            {activeList.length > 0 && (
+              <>
+                <Text style={s.sectionHeader}>ACTIVE</Text>
+                {activeList.map(renderCard)}
+              </>
+            )}
+            {availableList.length > 0 && (
+              <>
+                <Text style={s.sectionHeader}>AVAILABLE</Text>
+                {availableList.map(renderCard)}
+              </>
+            )}
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -164,151 +196,114 @@ interface QuestCardProps {
 function QuestCard({ cv, walletConnected, starting, onStart, onView }: QuestCardProps) {
   const { catalog, instance, progressPct } = cv
   const status = cv.effectiveStatus
+  const gradient = gradientForCatalog(catalog)
 
-  const badgeNeutral = (
-    <View style={s.questBadge}>
-      <Text style={s.questBadgeText}>🛡 {catalog.nft.romanNumeral}</Text>
-    </View>
-  )
+  const isClaim     = status === 'completed'
+  const isActive    = status === 'active'
+  const isFailed    = status === 'failed'
+  const cardPressable = isClaim || isActive
+  const startDisabled = !walletConnected || starting
 
-  // ─── Available (no instance) or Failed (retryable) ───
-  if (!instance || status === 'failed') {
-    const isFailed = status === 'failed'
-    const startDisabled = !walletConnected || starting
+  // Button label + variant (outline reserved for failed retry)
+  const btnVariant: 'fill' | 'outline' = isFailed ? 'outline' : 'fill'
+  const btnLabel = isClaim
+    ? 'Claim Reward →'
+    : isActive
+    ? 'View Progress →'
+    : isFailed
+    ? (starting ? 'Starting...' : 'Try Again')
+    : starting
+    ? 'Starting...'
+    : !walletConnected
+    ? 'Start Quest'
+    : 'Start Quest →'
 
-    return (
-      <View style={[s.cardBase, isFailed && s.cardDim]}>
-        {isFailed && <View style={s.stripFailed} />}
-        <View style={s.cardBody}>
-          <View style={s.cardHead}>
-            <View style={{ flex: 1 }}>
-              {isFailed && <Text style={s.statusFailed}>✗ FAILED</Text>}
-              <Text style={s.questName}>{catalog.name}</Text>
-              <Text style={s.questTagline}>
-                {isFailed ? 'Missed a day · Try again' : catalog.tagline}
-              </Text>
-            </View>
-            {badgeNeutral}
-          </View>
-          <Text style={s.questReq}>
-            {catalog.requirementDays} days · {catalog.requirementDailyReps} squats/day
-          </Text>
-          <Text style={s.questReward}>
-            Reward: +{catalog.bonusPoints.toLocaleString()} points
-          </Text>
-          <TouchableOpacity
-            style={[
-              isFailed ? s.btnOutline : s.btnPrimary,
-              startDisabled && (isFailed ? s.btnOutlineDisabled : s.btnPrimaryDisabled),
-            ]}
-            onPress={onStart}
-            disabled={startDisabled}
-            activeOpacity={0.85}
-          >
-            <Text
-              style={[
-                isFailed ? s.btnOutlineText : s.btnPrimaryText,
-                startDisabled && s.btnDisabledText,
-              ]}
-            >
-              {starting
-                ? 'Starting...'
-                : isFailed
-                ? 'Try Again'
-                : !walletConnected
-                ? 'Start Quest'
-                : 'Start Quest →'}
-            </Text>
-          </TouchableOpacity>
+  const metCount = isActive && instance
+    ? Object.values(instance.progress.daysLog ?? {}).filter(d => d.met).length
+    : 0
+
+  const inner = (
+    <LinearGradient
+      colors={gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={s.card}
+    >
+      <View style={s.cardTopRow}>
+        <Text style={s.cardRarity}>{catalog.rarity.toUpperCase()}</Text>
+        <View style={s.romanBadge}>
+          <Text style={s.romanBadgeText}>🛡 {catalog.nft.romanNumeral}</Text>
         </View>
       </View>
-    )
-  }
 
-  // ─── Active ───
-  if (status === 'active') {
-    const metCount = Object.values(instance.progress.daysLog ?? {}).filter(d => d.met).length
-    return (
-      <TouchableOpacity style={s.cardActiveWrap} onPress={onView} activeOpacity={0.85}>
-        <LinearGradient
-          colors={[catalog.nft.gradientFrom, catalog.nft.gradientTo] as [string, string]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.cardActive}
-        >
-          <View style={s.cardActiveTopRow}>
-            <Text style={s.cardActiveRarity}>{catalog.rarity.toUpperCase()}</Text>
-            <View style={s.cardActiveBadge}>
-              <Text style={s.cardActiveBadgeText}>🛡 {catalog.nft.romanNumeral}</Text>
-            </View>
+      <Text style={s.cardName}>{catalog.name}</Text>
+
+      {isActive ? (
+        <>
+          <View style={s.progressBar}>
+            <View style={[s.progressFill, { width: `${progressPct * 100}%` }]} />
           </View>
-          <Text style={s.cardActiveName}>{catalog.name}</Text>
-          <View style={s.cardActiveProgressBar}>
-            <View style={[s.cardActiveProgressFill, { width: `${progressPct * 100}%` }]} />
-          </View>
-          <View style={s.cardActiveMetaRow}>
-            <Text style={s.cardActiveMeta}>
+          <View style={s.metaRow}>
+            <Text style={s.meta}>
               {metCount}/{catalog.requirementDays} days
               {cv.daysRemaining !== null ? ` · ${cv.daysRemaining} left` : ''}
             </Text>
-            <Text style={s.cardActivePct}>{Math.round(progressPct * 100)}%</Text>
+            <Text style={s.metaPct}>{Math.round(progressPct * 100)}%</Text>
           </View>
-          <View style={s.btnViewProgress}>
-            <Text style={s.btnViewProgressText}>View Progress →</Text>
-          </View>
-        </LinearGradient>
-      </TouchableOpacity>
-    )
-  }
-
-  // ─── Claim-pending (completed) ───
-  if (status === 'completed') {
-    return (
-      <TouchableOpacity style={s.cardClaim} onPress={onView} activeOpacity={0.85}>
-        <View style={s.cardHead}>
-          <Text style={s.statusClaim}>✓ READY TO CLAIM</Text>
-          <View style={s.questBadgeDark}>
-            <Text style={s.questBadgeDarkText}>🛡 {catalog.nft.romanNumeral}</Text>
-          </View>
-        </View>
-        <Text style={s.questNameClaim}>{catalog.name}</Text>
-        <Text style={s.claimReward}>
+        </>
+      ) : isClaim ? (
+        <Text style={s.cardReward}>
           Reward: +{catalog.bonusPoints.toLocaleString()} points
         </Text>
-        <View style={s.btnClaim}>
-          <Text style={s.btnClaimText}>Claim Reward →</Text>
+      ) : (
+        <>
+          {isFailed && (
+            <Text style={s.cardTagline}>Missed a day · Try again</Text>
+          )}
+          <Text style={s.cardReq}>
+            {catalog.requirementDays} days · {catalog.requirementDailyReps} squats/day
+          </Text>
+          <Text style={s.cardReward}>
+            Reward: +{catalog.bonusPoints.toLocaleString()} points
+          </Text>
+        </>
+      )}
+
+      {cardPressable ? (
+        <View style={s.btnFill}>
+          <Text style={s.btnFillText}>{btnLabel}</Text>
         </View>
+      ) : (
+        <TouchableOpacity
+          style={[
+            btnVariant === 'fill' ? s.btnFill : s.btnOutlineWhite,
+            startDisabled && (btnVariant === 'fill' ? s.btnFillDisabled : s.btnOutlineWhiteDisabled),
+          ]}
+          onPress={onStart}
+          disabled={startDisabled}
+          activeOpacity={0.85}
+        >
+          <Text
+            style={[
+              btnVariant === 'fill' ? s.btnFillText : s.btnOutlineWhiteText,
+              startDisabled && s.btnDisabledText,
+            ]}
+          >
+            {btnLabel}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </LinearGradient>
+  )
+
+  if (cardPressable) {
+    return (
+      <TouchableOpacity style={s.cardWrap} onPress={onView} activeOpacity={0.85}>
+        {inner}
       </TouchableOpacity>
     )
   }
-
-  // ─── Claimed (status === 'claimed') ───
-  return (
-    <View style={[s.cardBase, s.cardDim]}>
-      <View style={s.cardBody}>
-        <View style={s.cardHead}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.statusClaimed}>✓ CLAIMED</Text>
-            <Text style={s.questName}>{catalog.name}</Text>
-            <Text style={s.questEarned}>
-              +{(instance.bonusPointsAwarded ?? catalog.bonusPoints).toLocaleString()} points earned
-            </Text>
-          </View>
-          {badgeNeutral}
-        </View>
-        <TouchableOpacity
-          style={[s.btnGhost, starting && s.btnGhostDisabled]}
-          onPress={onStart}
-          disabled={starting}
-          activeOpacity={0.7}
-        >
-          <Text style={s.btnGhostText}>
-            {starting ? 'Starting...' : 'Start Again'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  )
+  return <View style={s.cardWrap}>{inner}</View>
 }
 
 const s = StyleSheet.create({
@@ -335,73 +330,43 @@ const s = StyleSheet.create({
   connectBtnText:      { color: '#fff', fontSize: 14, fontWeight: '800' },
 
   // Summary strip (connected)
-  summary:      { paddingVertical: 4, marginBottom: 12 },
+  summary:      { paddingVertical: 4, marginBottom: 4 },
   summaryText:  { fontSize: 12, color: C.sub },
   summaryNum:   { color: C.text, fontWeight: '800' },
   summarySep:   { color: C.muted },
 
-  // Card base
-  cardBase:   { flexDirection: 'row', backgroundColor: C.card, borderRadius: 18, borderWidth: 1.5, borderColor: C.line, marginBottom: 12, overflow: 'hidden' },
-  cardBody:   { flex: 1, padding: 16 },
-  cardHead:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
-  cardDim:    { opacity: 0.72 },
+  // Section headers
+  sectionHeader: { fontSize: 11, color: C.sub, letterSpacing: 1.4, fontWeight: '800', marginTop: 14, marginBottom: 8, paddingHorizontal: 2 },
 
-  stripFailed: { width: 4, backgroundColor: C.muted },
+  // Unified gradient card
+  cardWrap:    { marginBottom: 12 },
+  card:        { borderRadius: 18, padding: 16, overflow: 'hidden' },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  cardRarity: { fontSize: 9, color: 'rgba(255,255,255,0.85)', letterSpacing: 1.2, fontWeight: '700' },
 
-  questBadge:        { backgroundColor: C.bg2, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
-  questBadgeText:    { fontSize: 10, color: C.dark2, fontWeight: '700' },
-  questBadgeDark:    { backgroundColor: C.dark, borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
-  questBadgeDarkText:{ fontSize: 10, color: '#fff', fontWeight: '700' },
+  romanBadge:     { backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
+  romanBadgeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
 
-  questName:    { fontSize: 17, fontWeight: '800', color: C.text, letterSpacing: -0.3, marginBottom: 2 },
-  questTagline: { fontSize: 12, color: C.sub, marginBottom: 8 },
-  questReq:     { fontSize: 11, color: C.sub, marginBottom: 4 },
-  questReward:  { fontSize: 12, color: C.amber, fontWeight: '700', marginBottom: 14 },
+  cardName:    { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.3, marginBottom: 8 },
+  cardTagline: { fontSize: 12, color: 'rgba(255,255,255,0.78)', marginBottom: 6 },
+  cardReq:     { fontSize: 11, color: 'rgba(255,255,255,0.78)', marginBottom: 4 },
+  cardReward:  { fontSize: 12, color: C.amber3, fontWeight: '700', marginBottom: 14 },
 
-  // Status labels
-  statusFailed:  { fontSize: 9, color: C.muted, letterSpacing: 1.2, fontWeight: '800', marginBottom: 4 },
-  statusClaimed: { fontSize: 9, color: C.sub, letterSpacing: 1.2, fontWeight: '800', marginBottom: 4 },
+  progressBar:  { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
+  progressFill: { height: 5, backgroundColor: '#fff', borderRadius: 100 },
+  metaRow:      { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  meta:         { fontSize: 11, color: 'rgba(255,255,255,0.75)' },
+  metaPct:      { fontSize: 11, fontWeight: '800', color: '#fff' },
 
-  // Active card (gradient)
-  cardActiveWrap:           { marginBottom: 12 },
-  cardActive:               { borderRadius: 18, padding: 16, overflow: 'hidden' },
-  cardActiveTopRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  cardActiveRarity:         { fontSize: 9, color: 'rgba(255,255,255,0.85)', letterSpacing: 1.2, fontWeight: '700' },
-  cardActiveBadge:          { backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 100, paddingHorizontal: 8, paddingVertical: 3 },
-  cardActiveBadgeText:      { fontSize: 10, color: '#fff', fontWeight: '700' },
-  cardActiveName:           { fontSize: 17, fontWeight: '800', color: '#fff', letterSpacing: -0.3, marginBottom: 14 },
-  cardActiveProgressBar:    { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
-  cardActiveProgressFill:   { height: 5, backgroundColor: '#fff', borderRadius: 100 },
-  cardActiveMetaRow:        { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
-  cardActiveMeta:           { fontSize: 11, color: 'rgba(255,255,255,0.75)' },
-  cardActivePct:            { fontSize: 11, fontWeight: '800', color: '#fff' },
-  btnViewProgress:          { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnViewProgressText:      { color: '#fff', fontSize: 14, fontWeight: '800' },
+  btnFill:         { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  btnFillDisabled: { opacity: 0.5 },
+  btnFillText:     { color: '#fff', fontSize: 14, fontWeight: '800' },
 
-  // Buttons
-  btnPrimary:         { backgroundColor: C.amber2, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnPrimaryDisabled: { backgroundColor: C.bg3 },
-  btnPrimaryText:     { color: C.dark, fontSize: 14, fontWeight: '800' },
-  btnDisabledText:    { color: C.muted },
+  btnOutlineWhite:         { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.6)', backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  btnOutlineWhiteDisabled: { borderColor: 'rgba(255,255,255,0.3)' },
+  btnOutlineWhiteText:     { color: '#fff', fontSize: 14, fontWeight: '800' },
 
-  btnOutline:         { borderWidth: 1.5, borderColor: C.amber2, backgroundColor: 'transparent', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnOutlineDisabled: { borderColor: C.line, opacity: 0.7 },
-  btnOutlineText:     { color: C.amber, fontSize: 14, fontWeight: '800' },
-
-  btnGhost:         { paddingVertical: 10, alignItems: 'center' },
-  btnGhostDisabled: { opacity: 0.5 },
-  btnGhostText:     { color: C.sub, fontSize: 13, fontWeight: '700' },
-
-  // Claim card
-  cardClaim:       { backgroundColor: C.amber2, borderRadius: 18, padding: 18, marginBottom: 12, shadowColor: C.amber, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
-  statusClaim:     { fontSize: 9, color: `${C.dark}99`, letterSpacing: 1.5, fontWeight: '800' },
-  questNameClaim:  { fontSize: 18, fontWeight: '900', color: C.dark, letterSpacing: -0.4, marginTop: 4, marginBottom: 2 },
-  claimReward:     { fontSize: 12, color: `${C.dark}CC`, fontWeight: '600', marginBottom: 14 },
-  btnClaim:        { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  btnClaimText:    { color: '#fff', fontSize: 14, fontWeight: '800' },
-
-  // Claimed earned text
-  questEarned: { fontSize: 12, color: C.amber, fontWeight: '700', marginBottom: 8 },
+  btnDisabledText: { opacity: 0.7 },
 
   // Loading / Empty
   loadingState: { paddingVertical: 40, alignItems: 'center', gap: 10 },

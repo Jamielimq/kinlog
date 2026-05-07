@@ -68,86 +68,84 @@ async function initUserInFirestore(address: string) {
   try {
     const db = getFirestore(getApp());
     const userRef = doc(db, 'users', address);
-    // merge: true ensures existing data is never overwritten
-    await setDoc(userRef, { updatedAt: Date.now() }, { merge: true });
-
     const snap = await getDoc(userRef);
-    if (snap.data()?.createdAt == null) {
-      // Only set defaults for truly new users
-      await setDoc(userRef, {
-        points: 0,
-        totalWorkouts: 0,
-        totalSquats: 0,
-        dailyReps: 0,
-        bestStreak: 0,
-        currentStreak: 0,
-        lastWorkoutDate: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+    const data = snap.data() ?? {};
+    const now = Date.now();
+
+    // Stamp createdAt only on first connect; never overwrite stats.
+    // Every write here uses merge: true so an unexpected doc shape can never
+    // clobber existing fields (this was the source of the v1.1.0 reset bug).
+    const stamp: { updatedAt: number; createdAt?: number } = { updatedAt: now };
+    if (data.createdAt == null) stamp.createdAt = now;
+    await setDoc(userRef, stamp, { merge: true });
+
+    // Always reconcile from subcollections (source of truth). Runs for both
+    // new and existing users — covers the case where parent doc was wiped or
+    // partially written but workouts/points_history survived.
+    try {
+      const historySnap: FirebaseFirestoreTypes.QuerySnapshot =
+        await getDocs(collection(db, 'users', address, 'points_history'));
+      let totalPoints = 0;
+      historySnap.forEach(d => { totalPoints += d.data().amount ?? 0; });
+
+      const workoutsSnap: FirebaseFirestoreTypes.QuerySnapshot =
+        await getDocs(collection(db, 'users', address, 'workouts'));
+      let totalSquats = 0;
+      let lastWorkoutDate = 0;
+      const dayStarts = new Set<number>();
+      const today = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); })();
+      let dailyReps = 0;
+      workoutsSnap.forEach(d => {
+        const reps = d.data().reps ?? 0;
+        const ts = d.data().createdAt ?? 0;
+        totalSquats += reps;
+        if (ts > 0) {
+          if (ts > lastWorkoutDate) lastWorkoutDate = ts;
+          if (ts >= today) dailyReps += reps;
+          const ds = new Date(ts); ds.setHours(0,0,0,0);
+          dayStarts.add(ds.getTime());
+        }
       });
-      console.log('New user created in Firestore:', address);
-    } else {
-      console.log('Existing user loaded:', address);
+      const totalWorkouts = dayStarts.size;
+      const sortedDays = [...dayStarts].sort((a, b) => a - b);
 
-      // Auto-recover from subcollections (source of truth)
-      try {
-        // Recover points from points_history
-        const historyRef = collection(db, 'users', address, 'points_history');
-        const historySnap: FirebaseFirestoreTypes.QuerySnapshot = await getDocs(historyRef);
-        let totalPoints = 0;
-        historySnap.forEach(d => { totalPoints += d.data().amount ?? 0; });
-
-        // Recover workouts and squats from workouts subcollection
-        const workoutsRef = collection(db, 'users', address, 'workouts');
-        const workoutsSnap: FirebaseFirestoreTypes.QuerySnapshot = await getDocs(workoutsRef);
-        let totalSquats = 0;
-        const workoutDays = new Set<string>();
-        const workoutDates: number[] = [];
-        workoutsSnap.forEach(d => {
-          totalSquats += d.data().reps ?? 0;
-          const ts = d.data().createdAt ?? 0;
-          if (ts > 0) {
-            const day = new Date(ts).toDateString();
-            workoutDays.add(day);
-            workoutDates.push(ts);
-          }
-        });
-        const totalWorkouts = workoutDays.size;
-
-        // Calculate best streak from workout dates
-        const sortedDays = [...workoutDays].map(d => new Date(d).getTime()).sort((a, b) => a - b);
-        let bestStreak = sortedDays.length > 0 ? 1 : 0;
-        let currentRun = 1;
-        for (let i = 1; i < sortedDays.length; i++) {
-          const diff = sortedDays[i] - sortedDays[i - 1];
-          if (diff <= 86400000) {
-            currentRun++;
-            if (currentRun > bestStreak) bestStreak = currentRun;
-          } else {
-            currentRun = 1;
-          }
+      let bestStreak = sortedDays.length > 0 ? 1 : 0;
+      let run = 1;
+      for (let i = 1; i < sortedDays.length; i++) {
+        if (sortedDays[i] - sortedDays[i - 1] === 86400000) {
+          run++; if (run > bestStreak) bestStreak = run;
+        } else {
+          run = 1;
         }
-
-        const data = snap.data() ?? {};
-        const needsRecovery =
-          totalPoints > (data.points ?? 0) ||
-          totalSquats > (data.totalSquats ?? 0) ||
-          totalWorkouts > (data.totalWorkouts ?? 0) ||
-          bestStreak > (data.bestStreak ?? 0);
-
-        if (needsRecovery) {
-          const updates: any = {};
-          if (totalPoints > (data.points ?? 0)) updates.points = totalPoints;
-          if (totalSquats > (data.totalSquats ?? 0)) updates.totalSquats = totalSquats;
-          if (totalWorkouts > (data.totalWorkouts ?? 0)) updates.totalWorkouts = totalWorkouts;
-          if (bestStreak > (data.bestStreak ?? 0)) updates.bestStreak = bestStreak;
-          updates.updatedAt = Date.now();
-          console.log('Data recovery:', JSON.stringify(updates));
-          await setDoc(userRef, updates, { merge: true });
-        }
-      } catch (e) {
-        console.log('Recovery error:', e);
       }
+      const yesterday = today - 86400000;
+      let currentStreak = 0;
+      const lastDay = sortedDays[sortedDays.length - 1] ?? 0;
+      if (lastDay >= yesterday) {
+        currentStreak = 1;
+        for (let i = sortedDays.length - 2; i >= 0; i--) {
+          if (sortedDays[i + 1] - sortedDays[i] === 86400000) currentStreak++;
+          else break;
+        }
+      }
+
+      // Only update fields where derived > current. Avoids clobbering an
+      // in-flight saveWorkout's increment, and avoids redundant writes.
+      const updates: Record<string, number> = {};
+      if (totalPoints     > (data.points          ?? 0)) updates.points          = totalPoints;
+      if (totalSquats     > (data.totalSquats     ?? 0)) updates.totalSquats     = totalSquats;
+      if (totalWorkouts   > (data.totalWorkouts   ?? 0)) updates.totalWorkouts   = totalWorkouts;
+      if (bestStreak      > (data.bestStreak      ?? 0)) updates.bestStreak      = bestStreak;
+      if (currentStreak   > (data.currentStreak   ?? 0)) updates.currentStreak   = currentStreak;
+      if (lastWorkoutDate > (data.lastWorkoutDate ?? 0)) updates.lastWorkoutDate = lastWorkoutDate;
+      if (dailyReps       > (data.dailyReps       ?? 0)) updates.dailyReps       = dailyReps;
+      if (Object.keys(updates).length) {
+        updates.updatedAt = now;
+        console.log('Data recovery:', JSON.stringify(updates));
+        await setDoc(userRef, updates, { merge: true });
+      }
+    } catch (e) {
+      console.log('Recovery error:', e);
     }
   } catch (e: any) {
     console.log('Firestore error:', e?.message, e?.code, JSON.stringify(e));

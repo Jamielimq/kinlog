@@ -18,7 +18,7 @@ npm run lint         # expo lint
 
 There is no test runner configured. The `web` script exists but the app depends on a native Android module and the camera, so web/iOS will not be functional.
 
-Release builds need `KINLOG_UPLOAD_STORE_FILE` / `_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` set in `~/.gradle/gradle.properties` (see `android/app/build.gradle`).
+Release builds need `KINLOG_UPLOAD_STORE_FILE` / `_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` set in `android/gradle.properties` (gitignored; see `android/app/build.gradle`).
 
 ## Build Environment
 

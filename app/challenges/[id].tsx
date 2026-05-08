@@ -202,8 +202,10 @@ export default function ChallengeDetailScreen() {
     bottom = { label: isClaiming ? 'Claiming...' : 'Claim Reward →', onPress: handleClaim, primary: true, disabled: isClaiming }
   } else if (status === 'failed') {
     bottom = { label: isStarting ? 'Starting...' : 'Try Again', onPress: handleStart, primary: true, disabled: isStarting }
+  } else if (status === 'completed_today') {
+    bottom = { label: 'Available tomorrow', onPress: () => {}, primary: false, disabled: true }
   } else {
-    // claimed
+    // 'available' with prior instance — claimed on a previous calendar day.
     bottom = { label: isStarting ? 'Starting...' : 'Start Again', onPress: handleStart, primary: false, disabled: isStarting }
   }
 
@@ -280,7 +282,7 @@ export default function ChallengeDetailScreen() {
         ) : null}
 
         {/* Daily Progress grid (active / completed / failed) */}
-        {instance && status !== 'claimed' && (
+        {instance && instance.status !== 'claimed' && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Daily Progress</Text>
             <View style={[s.daysGrid, { gap: cellGap }]}>

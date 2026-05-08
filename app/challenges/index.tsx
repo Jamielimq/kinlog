@@ -38,12 +38,16 @@ export default function ChallengesScreen() {
     () => challenges.filter(c => c.effectiveStatus === 'active').sort(byReqDays),
     [challenges],
   )
+  const completedToday = useMemo(
+    () => challenges.filter(c => c.effectiveStatus === 'completed_today').sort(byReqDays),
+    [challenges],
+  )
   const availableList = useMemo(
     () =>
       challenges
-        .filter(c => !c.instance || c.effectiveStatus === 'failed')
+        .filter(c => c.effectiveStatus === 'available' || c.effectiveStatus === 'failed')
         .sort((a, b) => {
-          // Failed first (retry-eligible), no-instance after.
+          // Failed first (retry-eligible), available after.
           const af = a.effectiveStatus === 'failed' ? 0 : 1
           const bf = b.effectiveStatus === 'failed' ? 0 : 1
           return af !== bf ? af - bf : byReqDays(a, b)
@@ -55,7 +59,7 @@ export default function ChallengesScreen() {
     const active = challenges.filter(c => c.effectiveStatus === 'active').length
     const completed = instances.filter(i => i.status === 'claimed').length
     const available = challenges.filter(
-      c => !c.instance || c.effectiveStatus === 'failed',
+      c => c.effectiveStatus === 'available' || c.effectiveStatus === 'failed',
     ).length
     return { active, completed, available }
   }, [challenges, instances])
@@ -172,6 +176,12 @@ export default function ChallengesScreen() {
                 {activeList.map(renderCard)}
               </>
             )}
+            {completedToday.length > 0 && (
+              <>
+                <Text style={s.sectionHeader}>COMPLETED</Text>
+                {completedToday.map(renderCard)}
+              </>
+            )}
             {availableList.length > 0 && (
               <>
                 <Text style={s.sectionHeader}>AVAILABLE</Text>
@@ -201,6 +211,7 @@ function QuestCard({ cv, walletConnected, starting, onStart, onView }: QuestCard
   const isClaim     = status === 'completed'
   const isActive    = status === 'active'
   const isFailed    = status === 'failed'
+  const isCompletedToday = status === 'completed_today'
   const cardPressable = isClaim || isActive
   const startDisabled = !walletConnected || starting
 
@@ -255,6 +266,11 @@ function QuestCard({ cv, walletConnected, starting, onStart, onView }: QuestCard
         <Text style={s.cardReward}>
           Reward: +{catalog.bonusPoints.toLocaleString()} points
         </Text>
+      ) : isCompletedToday ? (
+        <>
+          <Text style={s.cardClaimedLabel}>✓ Claimed today</Text>
+          <Text style={s.cardClaimedSub}>Available tomorrow</Text>
+        </>
       ) : (
         <>
           {isFailed && (
@@ -269,7 +285,7 @@ function QuestCard({ cv, walletConnected, starting, onStart, onView }: QuestCard
         </>
       )}
 
-      {cardPressable ? (
+      {isCompletedToday ? null : cardPressable ? (
         <View style={s.btnFill}>
           <Text style={s.btnFillText}>{btnLabel}</Text>
         </View>
@@ -351,6 +367,9 @@ const s = StyleSheet.create({
   cardTagline: { fontSize: 12, color: 'rgba(255,255,255,0.78)', marginBottom: 6 },
   cardReq:     { fontSize: 11, color: 'rgba(255,255,255,0.78)', marginBottom: 4 },
   cardReward:  { fontSize: 12, color: C.amber3, fontWeight: '700', marginBottom: 14 },
+
+  cardClaimedLabel: { fontSize: 13, fontWeight: '800', color: '#fff', marginBottom: 2 },
+  cardClaimedSub:   { fontSize: 11, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
 
   progressBar:  { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 100, marginBottom: 8, overflow: 'hidden' },
   progressFill: { height: 5, backgroundColor: '#fff', borderRadius: 100 },

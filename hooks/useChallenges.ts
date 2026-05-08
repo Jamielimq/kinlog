@@ -9,7 +9,7 @@ import {
   where,
 } from '@react-native-firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
-import { elapsedDays } from './challengeProgress';
+import { elapsedDays, localDayStartMs } from './challengeProgress';
 
 // ───────────────────────────────────────────────────────────────
 // Catalog: challenges/{challengeId}
@@ -81,14 +81,25 @@ export interface UserChallengeInstance {
 // Merged view returned to the UI
 // ───────────────────────────────────────────────────────────────
 
+// View-layer status. Diverges from Firestore in two ways:
+//  - 'active' past its window surfaces as 'failed' (idle expiration);
+//    re-syncs on the next workout.
+//  - 'claimed' splits by calendar day: same-day → 'completed_today'
+//    (locked card, no button), next day+ → 'available' (re-startable).
+//    'available' also covers catalogs with no instance yet.
+// Firestore status is the source of truth. Writes that gate on status
+// (claim) MUST read instance.status, not this.
+export type EffectiveChallengeStatus =
+  | 'active'
+  | 'completed'
+  | 'failed'
+  | 'completed_today'
+  | 'available';
+
 export interface ChallengeView {
   catalog: ChallengeCatalog;
   instance: UserChallengeInstance | null;
-  // View-layer status overlay: 'active' instances past their window
-  // surface as 'failed' here (idle expiration). Firestore status remains
-  // the source of truth and re-syncs on the next workout. Writes that
-  // gate on status (claim) MUST read instance.status, not this.
-  effectiveStatus: UserChallengeStatus | null;
+  effectiveStatus: EffectiveChallengeStatus;
   isStartable: boolean;
   daysRemaining: number | null;
   progressPct: number; // 0..1
@@ -107,16 +118,24 @@ function pickCurrentInstance(
   })[0];
 }
 
-// Idle-expiration overlay: 'active' instances that have outlived their
-// window surface as 'failed' to the UI. We do NOT promote 'active' to
-// 'completed' even if metCount >= req — that path is essentially
-// unreachable after (f), and showing Claim while Firestore is 'active'
-// would let users click into a guard-rejected claim.
+// Idle-expiration overlay for 'active', plus calendar-day split for
+// 'claimed'. We do NOT promote 'active' to 'completed' even if
+// metCount >= req — that path is essentially unreachable after (f),
+// and showing Claim while Firestore is 'active' would let users click
+// into a guard-rejected claim.
 function deriveEffectiveStatus(
   instance: UserChallengeInstance | null,
   now: number,
-): UserChallengeStatus | null {
-  if (!instance) return null;
+): EffectiveChallengeStatus {
+  if (!instance) return 'available';
+  if (instance.status === 'claimed') {
+    // Legacy instances without claimedAt fall through to 'available'
+    // (1970 ≠ today), which lets the user re-start. Safe default.
+    const claimedAt = instance.claimedAt ?? 0;
+    return localDayStartMs(claimedAt) === localDayStartMs(now)
+      ? 'completed_today'
+      : 'available';
+  }
   if (instance.status !== 'active') return instance.status;
   const req = instance.requirementSnapshot.requirementDays;
   if (elapsedDays(instance.startedAt, now) <= req - 1) return 'active';
@@ -177,7 +196,7 @@ export function useChallenges(address: string | null) {
       const instance = pickCurrentInstance(forThis);
       const effectiveStatus = deriveEffectiveStatus(instance, now);
       const isStartable =
-        !instance || effectiveStatus === 'claimed' || effectiveStatus === 'failed';
+        effectiveStatus === 'available' || effectiveStatus === 'failed';
 
       let progressPct = 0;
       let daysRemaining: number | null = null;

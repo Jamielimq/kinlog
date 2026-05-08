@@ -37,7 +37,7 @@ export function localDateKey(ms: number): string {
   return `${y}-${m}-${day}`;
 }
 
-function localDayStartMs(ms: number): number {
+export function localDayStartMs(ms: number): number {
   const d = new Date(ms);
   d.setHours(0, 0, 0, 0);
   return d.getTime();

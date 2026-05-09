@@ -1,41 +1,45 @@
 import { getApp } from '@react-native-firebase/app';
-import { doc, getDoc, getFirestore, setDoc } from '@react-native-firebase/firestore';
+import { deleteDoc, doc, getFirestore } from '@react-native-firebase/firestore';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
 
 const HELIUS_API_KEY = process.env.EXPO_PUBLIC_HELIUS_API_KEY;
-const HELIUS_RPC = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
+const RPC_URL = HELIUS_API_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
+  : 'https://api.mainnet-beta.solana.com';
+
 const STAKING_PROGRAM = new PublicKey('SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ');
-const STAKE_CONFIG = '4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw';
-const PROGRAM_ID = 'SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ';
+const STAKE_CONFIG = new PublicKey('4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw');
+const GUARDIAN_POOL = new PublicKey('DPJ58trLsF9yPrBa2pk6UaRkvqW8hWUYjawe788WBuqr');
+
+// Account layouts (with 8-byte Anchor discriminator).
+// UserStake (169 B):   bump(1) | stake_config(32) | user(32) | guardian_pool(32) | shares(u128) | ...
+// StakeConfig (193 B): bump(1) | authority(32) | mint(32) | stake_vault(32) | min_stake(u64)
+//                    | cooldown(u64) | total_shares(u128) | share_price(u128) | ...
+const USERSTAKE_SHARES_OFFSET = 105; // 8 + 1 + 32 + 32 + 32
+const STAKECONFIG_SHARE_PRICE_OFFSET = 137; // 8 + 1 + 32 + 32 + 32 + 8 + 8 + 16
+
+const SHARE_PRICE_SCALE = 1_000_000_000n; // u128 scale used by SKR program
+const SKR_DECIMALS_POW = 1_000_000n; // SKR has 6 decimals
 const MIN_STAKED = 1;
 
-// Find stake PDA from Helius transaction history
-async function findPDAFromTransactions(walletAddress: string): Promise<string | null> {
-  try {
-    const url = `https://api.helius.xyz/v0/addresses/${walletAddress}/transactions?api-key=${HELIUS_API_KEY}&limit=100`;
-    const res = await fetch(url);
-    const txs = await res.json();
+function readU128LE(buf: Buffer, off: number): bigint {
+  const lo = buf.readBigUInt64LE(off);
+  const hi = buf.readBigUInt64LE(off + 8);
+  return (hi << 64n) | lo;
+}
 
-    for (const tx of txs) {
-      for (const ix of tx.instructions || []) {
-        if (ix.programId === PROGRAM_ID && ix.accounts?.length > 0) {
-          return ix.accounts[0];
-        }
-      }
-      for (const inner of tx.innerInstructions || []) {
-        for (const ix of inner.instructions || []) {
-          if (ix.programId === PROGRAM_ID && ix.accounts?.length > 0) {
-            return ix.accounts[0];
-          }
-        }
-      }
-    }
-    return null;
-  } catch (e: any) {
-    console.log('SKR: Transaction search error:', e?.message?.slice(0, 100));
-    return null;
-  }
+function deriveUserStakePda(user: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from('user_stake'),
+      STAKE_CONFIG.toBuffer(),
+      user.toBuffer(),
+      GUARDIAN_POOL.toBuffer(),
+    ],
+    STAKING_PROGRAM,
+  );
+  return pda;
 }
 
 export function useSkrStaking(address: string | null) {
@@ -50,103 +54,60 @@ export function useSkrStaking(address: string | null) {
       return;
     }
 
+    let cancelled = false;
     const check = async () => {
       setLoading(true);
       try {
-        if (!HELIUS_API_KEY) {
-          throw new Error(
-            'Missing EXPO_PUBLIC_HELIUS_API_KEY. Add it to a local .env file (see .env.example).'
-          );
-        }
-        const connection = new Connection(HELIUS_RPC, 'confirmed');
-        const db = getFirestore(getApp());
+        const connection = new Connection(RPC_URL, 'confirmed');
+        const user = new PublicKey(address);
+        const pda = deriveUserStakePda(user);
 
-        // 1. Get sharePrice from config account
-        const cfgInfo = await connection.getAccountInfo(new PublicKey(STAKE_CONFIG));
-        if (!cfgInfo) { console.log('SKR: Config not found'); return; }
-        const sharePrice = Number(cfgInfo.data.readBigUInt64LE(137));
+        const [pdaInfo, configInfo] = await Promise.all([
+          connection.getAccountInfo(pda),
+          connection.getAccountInfo(STAKE_CONFIG),
+        ]);
+        if (cancelled) return;
 
-        // 2. Check Firebase cache first
-        const cacheRef = doc(db, 'users', address, 'cache', 'skr_staking');
-        const cacheSnap = await getDoc(cacheRef);
-        const cachedAccount = cacheSnap.data()?.stakeAccount;
-
-        let stakeAccountData = null;
-        let foundAddress = '';
-
-        if (cachedAccount) {
-          console.log('SKR: Using cached account:', cachedAccount);
-          const info = await connection.getAccountInfo(new PublicKey(cachedAccount));
-          if (info && info.data.length === 169) {
-            stakeAccountData = info.data;
-          }
-        }
-
-        // 3. If no cache, try Helius transaction API (reliable)
-        if (!stakeAccountData) {
-          console.log('SKR: Searching via transaction history...');
-          const pda = await findPDAFromTransactions(address);
-          if (pda) {
-            console.log('SKR: Found PDA from transactions:', pda);
-            const info = await connection.getAccountInfo(new PublicKey(pda));
-            if (info && info.data.length === 169) {
-              stakeAccountData = info.data;
-              foundAddress = pda;
-            }
-          }
-        }
-
-        // 4. Last resort: getProgramAccounts with retry
-        if (!stakeAccountData) {
-          console.log('SKR: Trying getProgramAccounts...');
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              const accounts = await connection.getProgramAccounts(STAKING_PROGRAM, {
-                filters: [
-                  { dataSize: 169 },
-                  { memcmp: { offset: 41, bytes: address } },
-                ],
-              });
-              if (accounts.length > 0) {
-                stakeAccountData = accounts[0].account.data;
-                foundAddress = accounts[0].pubkey.toBase58();
-                console.log('SKR: Found via getProgramAccounts on attempt', attempt);
-                break;
-              }
-            } catch (e: any) {
-              console.log('SKR: Attempt', attempt, 'error');
-            }
-            if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
-          }
-        }
-
-        // 5. Cache the found address
-        if (foundAddress) {
-          await setDoc(cacheRef, { stakeAccount: foundAddress, updatedAt: Date.now() }, { merge: true });
-        }
-
-        // 6. Calculate staked amount
-        if (stakeAccountData) {
-          const shares = Number(stakeAccountData.readBigUInt64LE(104));
-          const skr = shares * sharePrice / 1e15 / 256;
-          const rounded = Math.round(skr * 100) / 100;
-          console.log('SKR total staked:', rounded);
-          setStakedAmount(rounded);
-          setIsStaker(rounded >= MIN_STAKED);
-        } else {
-          console.log('SKR: No stake account found');
+        if (!pdaInfo || pdaInfo.data.length !== 169) {
           setStakedAmount(0);
           setIsStaker(false);
+          return;
         }
+        if (!configInfo) {
+          console.log('SKR: StakeConfig not found');
+          return;
+        }
+
+        const shares = readU128LE(pdaInfo.data, USERSTAKE_SHARES_OFFSET);
+        const sharePrice = readU128LE(configInfo.data, STAKECONFIG_SHARE_PRICE_OFFSET);
+        const rawTokens = (shares * sharePrice) / SHARE_PRICE_SCALE;
+        const skr = Number(rawTokens) / Number(SKR_DECIMALS_POW);
+        const rounded = Math.round(skr * 100) / 100;
+
+        setStakedAmount(rounded);
+        setIsStaker(rounded >= MIN_STAKED);
       } catch (e: any) {
-        console.log('SKR check error:', e?.message);
-        setIsStaker(false);
+        if (!cancelled) {
+          console.log('SKR check error:', e?.message);
+          setIsStaker(false);
+        }
       } finally {
-        setLoading(false);
+        // Drain the legacy `cache/skr_staking` doc — new path never reads it.
+        // Silent fail: rules denial or already-absent both leave us correct.
+        try {
+          const db = getFirestore(getApp());
+          await deleteDoc(doc(db, 'users', address, 'cache', 'skr_staking'));
+        } catch {
+          // ignore
+        }
+        if (!cancelled) setLoading(false);
       }
     };
 
     check();
+    return () => {
+      cancelled = true;
+    };
   }, [address]);
 
   return { stakedAmount, isStaker, loading };

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kinlog — The Movement Layer for Solana</title>
+    <meta name="description" content="AI fitness dApp on Solana Mobile. Validates squats with on-device pose detection, rewards on-chain. Built by a Physical Therapist.">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+            background: #FAFAF9;
+            color: #2D2926;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 80px 24px 40px;
+        }
+        
+        .logo {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+        }
+        
+        .logo .accent {
+            color: #D97706;
+        }
+        
+        .tagline {
+            font-size: 24px;
+            font-weight: 500;
+            color: #2D2926;
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+        }
+        
+        .tagline .accent {
+            color: #D97706;
+        }
+        
+        .subtitle {
+            font-size: 16px;
+            color: #78716C;
+            margin-bottom: 48px;
+            max-width: 600px;
+        }
+        
+        .badges {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 48px;
+        }
+        
+        .badge {
+            background: #FFFBEB;
+            color: #D97706;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #78716C;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+        
+        .feature {
+            background: #FFFFFF;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #E7E5E4;
+        }
+        
+        .feature-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #2D2926;
+        }
+        
+        .feature-desc {
+            font-size: 14px;
+            color: #78716C;
+        }
+        
+        .links {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #FFFFFF;
+            border: 1px solid #E7E5E4;
+            border-radius: 12px;
+            padding: 16px 20px;
+            text-decoration: none;
+            color: #2D2926;
+            transition: border-color 0.2s;
+        }
+        
+        .link:hover {
+            border-color: #D97706;
+        }
+        
+        .link-title {
+            font-weight: 500;
+        }
+        
+        .link-arrow {
+            color: #D97706;
+            font-weight: 600;
+        }
+        
+        .founder {
+            background: #2D2926;
+            color: #FAFAF9;
+            padding: 32px;
+            border-radius: 16px;
+            margin-bottom: 40px;
+        }
+        
+        .founder-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #FCD34D;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+        
+        .founder-name {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .founder-title {
+            font-size: 14px;
+            color: #A8A29E;
+        }
+        
+        .footer {
+            border-top: 1px solid #E7E5E4;
+            padding-top: 24px;
+            font-size: 13px;
+            color: #A8A29E;
+        }
+        
+        .footer-links {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 8px;
+        }
+        
+        .footer-link {
+            color: #78716C;
+            text-decoration: none;
+        }
+        
+        .footer-link:hover {
+            color: #D97706;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 48px 20px 32px;
+            }
+            
+            .logo {
+                font-size: 36px;
+            }
+            
+            .tagline {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">Kin<span class="accent">log</span></div>
+        <div class="tagline">The Movement Layer for <span class="accent">Solana</span>.</div>
+        <p class="subtitle">
+            As AI advances, human movement becomes more valuable. 
+            Kinlog tracks it. Solana records it.
+        </p>
+        
+        <div class="badges">
+            <span class="badge">Live on Solana Mobile dApp Store</span>
+            <span class="badge">MONOLITH Honorable Mention</span>
+            <span class="badge">v1.3.1</span>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">What is Kinlog</div>
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-title">AI Pose Detection</div>
+                    <div class="feature-desc">MediaPipe validates each squat with hip-knee-ankle angle. On-device.</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">30 Squats a Day</div>
+                    <div class="feature-desc">Daily habit, tracked by AI, recorded on-chain.</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">SKR Staker Rewards</div>
+                    <div class="feature-desc">Exclusive Legendary badges for Solana Mobile token stakers.</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">On-Chain Verified</div>
+                    <div class="feature-desc">Every workout, publicly verifiable on Solana.</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="founder">
+            <div class="founder-label">Built by</div>
+            <div class="founder-name">Jamielim</div>
+            <div class="founder-title">Physical Therapist · Athletic Trainer</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Links</div>
+            <div class="links">
+                <a href="https://github.com/Jamielimq/kinlog" class="link">
+                    <span class="link-title">GitHub Repository</span>
+                    <span class="link-arrow">→</span>
+                </a>
+                <a href="privacy-policy.html" class="link">
+                    <span class="link-title">Privacy Policy</span>
+                    <span class="link-arrow">→</span>
+                </a>
+                <a href="terms.html" class="link">
+                    <span class="link-title">Terms of Service</span>
+                    <span class="link-arrow">→</span>
+                </a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="footer-links">
+                <a href="privacy-policy.html" class="footer-link">Privacy</a>
+                <a href="terms.html" class="footer-link">Terms</a>
+                <a href="https://github.com/Jamielimq/kinlog" class="footer-link">GitHub</a>
+            </div>
+            <div>© 2026 Kinlog. MIT Licensed.</div>
+        </div>
+    </div>
+</body>
+</html>

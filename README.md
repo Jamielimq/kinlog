@@ -4,7 +4,7 @@
 > AI-powered fitness dApp. Tracked by AI. Owned by you.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-D97706.svg)](LICENSE)
-[![Solana dApp Store](https://img.shields.io/badge/Solana%20dApp%20Store-Live-14F195)](https://dappstore.solanamobile.com)
+![Solana dApp Store](https://img.shields.io/badge/Solana%20dApp%20Store-Live-14F195)
 [![Version](https://img.shields.io/badge/version-v1.3.1-2D2926)](https://github.com/Jamielimq/kinlog/releases)
 [![MONOLITH](https://img.shields.io/badge/MONOLITH-Honorable%20Mention-D97706)](https://blog.solanamobile.com)
 
@@ -162,19 +162,19 @@ For the first time, years of clinical knowledge became a single algorithm.
 
 | Home | Squat (Start) | Squat (Complete) |
 |:---:|:---:|:---:|
-| ![Home](assets/screenshots/1.%20Kinlog-Home.png) | ![Squat Start](assets/screenshots/9.%20Kinlog-Squat%20Start.png) | ![Squat End](assets/screenshots/10.%20Kinlog-Squat%20End.png) |
+| <img src="assets/screenshots/1.%20Kinlog-Home.png" width="240" alt="Home" /> | <img src="assets/screenshots/9.%20Kinlog-Squat%20Start.png" width="240" alt="Squat Start" /> | <img src="assets/screenshots/10.%20Kinlog-Squat%20End.png" width="240" alt="Squat End" /> |
 
 ### Goals & Achievements
 
 | Goals | Badges | Profile |
 |:---:|:---:|:---:|
-| ![Goals](assets/screenshots/3.%20Kinlog-Goal.png) | ![Badges](assets/screenshots/2.%20Kinlog-Badge.png) | ![Profile](assets/screenshots/5.%20Kinlog-Profile.png) |
+| <img src="assets/screenshots/3.%20Kinlog-Goal.png" width="240" alt="Goals" /> | <img src="assets/screenshots/2.%20Kinlog-Badge.png" width="240" alt="Badges" /> | <img src="assets/screenshots/5.%20Kinlog-Profile.png" width="240" alt="Profile" /> |
 
 ### Challenges
 
 | Challenges | 3-Day Challenge | 7-Day Challenge |
 |:---:|:---:|:---:|
-| ![Challenges](assets/screenshots/6.%20Kinlog-Challenge.png) | ![3-Day](assets/screenshots/7.%20Kinlog-3days%20Challenge.png) | ![7-Day](assets/screenshots/8.%20Kinlog-7days%20Challenge.png) |
+| <img src="assets/screenshots/6.%20Kinlog-Challenge.png" width="240" alt="Challenges" /> | <img src="assets/screenshots/7.%20Kinlog-3days%20Challenge.png" width="240" alt="3-Day Challenge" /> | <img src="assets/screenshots/8.%20Kinlog-7days%20Challenge.png" width="240" alt="7-Day Challenge" /> |
 
 ### SKR Staker Exclusive
 
@@ -302,9 +302,8 @@ A working clinician shipping on Solana Mobile.
 ## Links
 
 - [Website](https://jamielimq.github.io/kinlog/)
-- [Solana Mobile dApp Store](https://dappstore.solanamobile.com)
 - [GitHub](https://github.com/Jamielimq/kinlog)
-- [X (Twitter)](https://x.com/jamielimq)
+- [X (Twitter)](https://x.com/CryptoJHLim)
 
 ---
 

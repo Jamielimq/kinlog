@@ -5,9 +5,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-D97706.svg)](LICENSE)
 [![Solana dApp Store](https://img.shields.io/badge/Solana%20dApp%20Store-Live-14F195)](https://dappstore.solanamobile.com)
-[![Version](https://img.shields.io/badge/version-v1.1.0-2D2926)](https://github.com/Jamielimq/kinlog/releases)
+[![Version](https://img.shields.io/badge/version-v1.3.1-2D2926)](https://github.com/Jamielimq/kinlog/releases)
 [![MONOLITH](https://img.shields.io/badge/MONOLITH-Honorable%20Mention-D97706)](https://blog.solanamobile.com)
-[![Solana Frontier](https://img.shields.io/badge/Solana%20Frontier-2026-9945FF)](https://colosseum.com/frontier)
 
 Built by a licensed Physical Therapist & Athletic Trainer.
 
@@ -18,10 +17,9 @@ Built by a licensed Physical Therapist & Athletic Trainer.
 | | |
 |---|---|
 | **Live** | 🟢 Solana Mobile dApp Store |
-| **Version** | v1.1.0 |
-| **Reviews** | 22+ · ★★★★★ |
+| **Version** | v1.3.1 |
+| **Reviews** | 22+ · ★★★★ |
 | **Awards** | MONOLITH Honorable Mention (Solana Mobile, 2026) |
-| **Submission** | Solana Frontier Hackathon (Colosseum, May 2026) |
 | **License** | MIT |
 | **Platform** | Solana Mobile · Seeker · Android |
 
@@ -67,7 +65,7 @@ Your fitness history belongs to a corporation. Your achievements disappear when 
 
 Kinlog puts that on chain. Your effort, permanently yours.
 
-Every exercise you complete is recorded on Solana. Permanently. Immutably. Owned by you. Not as a number in a database. As an on-chain proof of effort. An NFT badge that no one can take away.
+Every exercise you complete is recorded on Solana. Permanently. Immutably. Owned by you. Not as a number in a database. As an on-chain proof of effort. A badge that no one can take away.
 
 **The most human thing you do deserves to be owned by you.**
 
@@ -82,7 +80,7 @@ Kinlog is a fitness dApp that uses AI-powered motion recognition to count squat 
 - Complete your daily 30-squat goal
 - Build streaks
 - Take on 3-Day and 7-Day Challenges
-- Earn NFT badges on Solana Mainnet
+- Earn badge rewards on Solana Mainnet
 - SKR stakers unlock exclusive Legendary badges
 
 Built by a licensed Physical Therapist who got tired of watching people move less and less.
@@ -115,7 +113,7 @@ For the first time, years of clinical knowledge became a single algorithm.
 - **Real-time Angle Display** · See your knee angle live on screen
 - **Daily Goals** · 30 squats per day with weekly and monthly targets
 - **3-Day & 7-Day Challenges** · Streak-building mechanics for daily habits
-- **NFT Badges** · 21 badges across 4 rarity tiers, minted on Solana Mainnet
+- **Badge Rewards** · 34 badges across 4 rarity tiers, issued on Solana Mainnet
 - **SKR Staker Rewards** · Exclusive Legendary badges for SKR stakers
 - **Streak Tracking** · Firebase Firestore tracks your consistency
 - **On-chain Records** · Every achievement permanently recorded on Solana
@@ -131,16 +129,16 @@ For the first time, years of clinical knowledge became a single algorithm.
 | **Mobile** | React Native (Expo bare workflow) |
 | **Motion AI** | MediaPipe Pose Landmarker (native Kotlin module) |
 | **Camera** | react-native-vision-camera |
-| **Blockchain** | Solana Mainnet-Beta |
+| **Blockchain** | Solana Mainnet |
 | **Wallet** | Solana Mobile Wallet Adapter (MWA) |
-| **NFT** | Metaplex (cNFT migration planned for Phase 4) |
+| **Badge Rewards** | Metaplex (compressed badge migration planned for Phase 4) |
 | **SKR Staking** | Helius API (3-layer lookup) |
 | **Backend** | Firebase Firestore |
 | **Target Device** | Solana Seeker (Android) |
 | **Open Source** | github.com/Jamielimq/kinlog · MIT |
 
 **Latency**: Sub-second pose inference
-**Fees**: ~0.001 SOL per badge mint
+**Fees**: ~0.001 SOL per badge issuance
 **Privacy**: On-device inference. No video uploaded or recorded.
 **Surface**: Mobile-first. On-chain.
 
@@ -153,7 +151,7 @@ For the first time, years of clinical knowledge became a single algorithm.
 3. The AI tracks your hip, knee, and ankle in real time
 4. Squat below 110° knee angle → stand above 160° → that is 1 rep
 5. Hit 30 reps to complete your daily goal
-6. Earn points. Build streaks. Mint NFT badges as permanent proof
+6. Earn points. Build streaks. Receive badge rewards as permanent proof
 7. Stake SKR to unlock Legendary badges
 
 ---
@@ -164,31 +162,31 @@ For the first time, years of clinical knowledge became a single algorithm.
 
 | Home | Squat (Start) | Squat (Complete) |
 |:---:|:---:|:---:|
-| ![Home](assets/screenshots/home.png) | ![Squat Start](assets/screenshots/squat-start.png) | ![Squat End](assets/screenshots/squat-end.png) |
+| ![Home](assets/screenshots/1.%20Kinlog-Home.png) | ![Squat Start](assets/screenshots/9.%20Kinlog-Squat%20Start.png) | ![Squat End](assets/screenshots/10.%20Kinlog-Squat%20End.png) |
 
 ### Goals & Achievements
 
 | Goals | Badges | Profile |
 |:---:|:---:|:---:|
-| ![Goals](assets/screenshots/goals.png) | ![Badges](assets/screenshots/badges.png) | ![Profile](assets/screenshots/profile.png) |
+| ![Goals](assets/screenshots/3.%20Kinlog-Goal.png) | ![Badges](assets/screenshots/2.%20Kinlog-Badge.png) | ![Profile](assets/screenshots/5.%20Kinlog-Profile.png) |
 
 ### Challenges
 
 | Challenges | 3-Day Challenge | 7-Day Challenge |
 |:---:|:---:|:---:|
-| ![Challenges](assets/screenshots/challenges.png) | ![3-Day](assets/screenshots/3day-challenge.png) | ![7-Day](assets/screenshots/7day-challenge.png) |
+| ![Challenges](assets/screenshots/6.%20Kinlog-Challenge.png) | ![3-Day](assets/screenshots/7.%20Kinlog-3days%20Challenge.png) | ![7-Day](assets/screenshots/8.%20Kinlog-7days%20Challenge.png) |
 
 ### SKR Staker Exclusive
 
 <p align="center">
-  <img src="assets/screenshots/skr-staking-badge.png" width="320" alt="SKR Legendary Badge" />
+  <img src="assets/screenshots/4.%20Kinlog-SKR%20Staking%20Badge.png" width="320" alt="SKR Legendary Badge" />
 </p>
 
 ---
 
-## NFT Badges
+## Badge Rewards
 
-21 unique badges across 4 rarity tiers.
+34 unique badges across 4 rarity tiers.
 
 | Tier | Examples |
 |---|---|
@@ -198,7 +196,7 @@ For the first time, years of clinical knowledge became a single algorithm.
 | 🟡 **Legendary** | Centurion, Streak Legend, Elite Athlete |
 | 🟠 **Legendary · SKR exclusive** | Unlocked by staking SKR. Unique to stakers only. |
 
-Every badge is minted on Solana Mainnet. ~0.001 SOL per mint.
+Every badge is issued on Solana Mainnet. ~0.001 SOL per badge.
 
 ---
 
@@ -223,14 +221,14 @@ If you stake, you qualify. If you do not, you do not.
 ### Phase 1 · Foundation (Q4 2025 to Q2 2026) ✅
 - MediaPipe pose detection
 - Mobile Wallet Adapter integration
-- 32-badge reward system
+- Badge reward system
 - MONOLITH Hackathon Honorable Mention
 
 ### Phase 2 · Movement Layer (Q2 2026) ✅ Live
 - SKR staking integration
 - 3-Day & 7-Day Challenges
 - Legendary stakers-only badges
-- Frontier Hackathon submission
+- Badge reward expansion to 34
 
 ### Phase 3 · Expansion (Q3 to Q4 2026)
 - New exercises (lunge, push-up, plank)
@@ -239,7 +237,7 @@ If you stake, you qualify. If you do not, you do not.
 - Strategic partnerships
 
 ### Phase 4 · Vision (2027+)
-- cNFT migration · Metaplex Bubblegum
+- Compressed badge migration · Metaplex Bubblegum
 - iOS & Google Play launch
 - AI coaching
 - Movement Layer SDK for Solana health dApps
@@ -278,9 +276,7 @@ All pose detection runs on device. Camera frames are never uploaded. No video is
 
 ## The Build
 
-This app was built solo by a Physical Therapist. Not a developer by training. Someone who spent more time studying the human body than writing code.
-
-With a little help from AI (Claude), the gap between knowledge and creation disappeared. What mattered was having something worth building.
+This app was built by a Physical Therapist with the help of AI (Claude). The gap between knowledge and creation closed. What mattered was having something worth building.
 
 Movement is the most honest thing a person can do. You cannot fake exercise. You cannot cheat a streak. The body does not lie.
 
@@ -305,10 +301,10 @@ A working clinician shipping on Solana Mobile.
 
 ## Links
 
-- 🌐 [Website](https://jamielimq.github.io/kinlog/)
-- 📱 [Solana Mobile dApp Store](https://dappstore.solanamobile.com)
-- 🐙 [GitHub](https://github.com/Jamielimq/kinlog)
-- 🐦 [X (Twitter)](https://x.com/jamielimq)
+- [Website](https://jamielimq.github.io/kinlog/)
+- [Solana Mobile dApp Store](https://dappstore.solanamobile.com)
+- [GitHub](https://github.com/Jamielimq/kinlog)
+- [X (Twitter)](https://x.com/jamielimq)
 
 ---
 

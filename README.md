@@ -1,11 +1,11 @@
 # Kinlog
 
 > **The Movement Layer for Solana.**
-> AI-powered fitness dApp. Tracked by AI. Owned by you.
+> AI Fitness dApp. Tracked by AI. Owned by you.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-D97706.svg)](LICENSE)
 ![Solana dApp Store](https://img.shields.io/badge/Solana%20dApp%20Store-Live-14F195)
-[![Version](https://img.shields.io/badge/version-v1.3.1-2D2926)](https://github.com/Jamielimq/kinlog/releases)
+[![Version](https://img.shields.io/badge/version-v1.3.3-2D2926)](https://github.com/Jamielimq/kinlog/releases)
 [![MONOLITH](https://img.shields.io/badge/MONOLITH-Honorable%20Mention-D97706)](https://blog.solanamobile.com)
 
 Built by a licensed Physical Therapist & Athletic Trainer.
@@ -17,7 +17,7 @@ Built by a licensed Physical Therapist & Athletic Trainer.
 | | |
 |---|---|
 | **Live** | 🟢 Solana Mobile dApp Store |
-| **Version** | v1.3.1 |
+| **Version** | v1.3.3 |
 | **Reviews** | 22+ · ★★★★ |
 | **Awards** | MONOLITH Honorable Mention (Solana Mobile, 2026) |
 | **License** | MIT |
@@ -75,7 +75,7 @@ This is why Web3 people should care about fitness. And why fitness people should
 
 ## What is Kinlog?
 
-Kinlog is a fitness dApp that uses AI-powered motion recognition to count squat reps in real time. No wearables. No gym equipment. Just your phone and your body.
+Kinlog is a fitness dApp that uses AI motion recognition to count squat reps in real time. No wearables. No gym equipment. Just your phone and your body.
 
 - Complete your daily 30-squat goal
 - Build streaks

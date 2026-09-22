@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(*expo prebuild*)",
+      "Bash(*expo run:android*)",
+      "Bash(*npm run android*)",
+      "Bash(*gradlew clean*)",
+      "Bash(*git clean*)",
+      "Bash(*git reset --hard*)",
+      "Bash(*git push --force*)",
+      "Bash(*git push -f*)",
+      "Bash(*rm -rf*)",
+      "Bash(*echo deny-test*)",
+      "Read(./.env)",
+      "Edit(./.env)",
+      "Read(./android/gradle.properties)",
+      "Edit(./android/gradle.properties)",
+      "Edit(./google-services.json)",
+      "Edit(./android/app/google-services.json)",
+      "Edit(./android/app/kinlog-release.keystore)"
+    ]
+  }
+}

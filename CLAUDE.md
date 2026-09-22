@@ -8,6 +8,8 @@ Kinlog — Expo (bare workflow) React Native fitness dApp targeting **Android / 
 
 Tagline: **"Move · Earn · Evolve"**. Built for the MONOLITH Solana Mobile Hackathon 2026, connected to RadiantsDAO. **Currently live on the Solana dApp Store**, Lifestyle category, version 1.1.0 (`versionCode 4`) — bumping these in `android/app/build.gradle` is a release-affecting change.
 
+Subsystem reference — squat detection, Firestore data model, challenge flow, badge minting, MWA signing, licensing: `docs/ARCHITECTURE.md`.
+
 ## Commands
 
 ```bash

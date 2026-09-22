@@ -14,9 +14,10 @@ Subsystem reference — squat detection, Firestore data model, challenge flow, b
 
 ```bash
 npm run start        # expo start (Metro)
-npm run android      # expo run:android — required for the native PoseLandmarker module
 npm run lint         # expo lint
 ```
+
+`npm run android` is **banned** — it invokes `npx expo run:android`. See Build Environment for the only sanctioned build path.
 
 There is no test runner configured. The `web` script exists but the app depends on a native Android module and the camera, so web/iOS will not be functional.
 
@@ -28,10 +29,17 @@ Release builds need `KINLOG_UPLOAD_STORE_FILE` / `_PASSWORD` / `KEY_ALIAS` / `KE
   ```bash
   export JAVA_HOME=$(/usr/libexec/java_home -v 17)
   ```
-- **DO NOT run `./gradlew clean`.** It wipes codegen output for `react-native-gesture-handler`, `react-native-reanimated`, and `react-native-worklets`, and the project will not rebuild cleanly afterward. If you need a fresh release build, delete only the APK and re-run Expo:
+- **Banned commands — never run these, in any variant, even when asked.** Raise the consequence and get explicit confirmation first:
+  - `npx expo prebuild`
+  - `npx expo run:android` (including `--variant release`, `--device`, and via `npm run android`)
+  - `./gradlew clean`
+
+  `expo run:android` can judge the project malformed and wipe all of `android/` before re-running prebuild. That has already happened here, destroying gitignored files that are not recoverable from git: `google-services.json`, the upload keystore, the `KINLOG_UPLOAD_*` entries in `android/gradle.properties`, the Kotlin `PoseLandmarker` module, and the MediaPipe `.task` model asset. `./gradlew clean` wipes codegen output for `react-native-gesture-handler`, `react-native-reanimated`, and `react-native-worklets`, and the project will not rebuild cleanly afterward.
+- **The only release build path.** For a fresh build, delete just the APK first:
   ```bash
-  rm android/app/build/outputs/apk/release/app-release.apk
-  npx expo run:android --variant release --device
+  export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+  rm -f android/app/build/outputs/apk/release/app-release.apk
+  cd android && ./gradlew assembleRelease
   ```
 - Release APK output: `android/app/build/outputs/apk/release/app-release.apk` (absolute: `~/kinlog/android/app/build/outputs/apk/release/app-release.apk`).
 

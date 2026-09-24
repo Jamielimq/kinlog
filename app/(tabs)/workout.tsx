@@ -382,6 +382,22 @@ export default function WorkoutScreen() {
     setTrackingLost(false)
     clearInterval(timerRef.current!)
     logPoseSession(poseStatsRef.current, repsRef.current)
+    // Leak check: the loop deletes every snapshot in its finally block, so this should
+    // read 0. Internal cache is unreadable over adb on a release build, so the app has
+    // to report it. Counted on a delay because a detection is usually still awaiting
+    // when Stop is pressed, and its finally has not run yet — counting immediately
+    // always finds that one in-flight frame and looks like a leak. Goes away with the
+    // POSE DEBUG block.
+    if (POSE_DEBUG) {
+      setTimeout(() => {
+        try {
+          const sd = new Directory(Paths.cache, SNAPSHOT_DIR)
+          console.log(`[POSE] session snapshot cache: ${sd.exists ? sd.list().length : 0} file(s) left`)
+        } catch (e) {
+          console.log('[POSE] snapshot cache check failed:', String(e))
+        }
+      }, 1500)
+    }
     const completedReps = repsRef.current
     const completedElapsed = elapsedRef.current
     if (completedReps > 0 && address) {

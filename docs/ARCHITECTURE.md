@@ -5,7 +5,10 @@ the daily workout record, badge issuance, SKR staking verification, MWA transact
 Every claim below is a description of code as it exists today, with `file:line` citations so you can jump
 straight to the source instead of re-deriving it.
 
-Accurate as of app version **1.3.3** (`versionCode 9`, `android/app/build.gradle:95-96`), commit `e383695`.
+Accurate as of app version **1.3.3** (`versionCode 9`, `android/app/build.gradle:95-96`). Section 1 reflects
+the Phase 1 squat-judgement rework (EMA smoothing, 3-frame confirmation, confidence gate, side-view-only
+capture, snapshot cleanup); `versionCode` was deliberately **not** bumped, as no store release is being cut
+for it.
 Companion documents: `CLAUDE.md` (working rules and settled product decisions), `README.md` (product overview).
 
 | Section | Primary files |
@@ -32,9 +35,13 @@ The loop lives at `app/(tabs)/workout.tsx:240-274`:
 1. `setInterval` every **100 ms** (`:271`).
 2. `detectingRef` guard (`:236`, `:244-245`) skips a tick while a previous detection is still in flight;
    the `finally` at `:268-270` always clears it.
-3. `cameraRef.current.takeSnapshot({ quality: 30 })` (`:247`) writes a JPEG to the camera cache.
-4. `detect('file://' + photo.path)` (`:249`) crosses the bridge to the native module.
-5. The returned landmarks are converted to one knee angle, which drives the state machine.
+3. `cameraRef.current.takeSnapshot({ quality: 30, path })` writes a JPEG into `<cache>/kinlog-snapshots`,
+   a directory the app owns.
+4. `detect('file://' + photo.path)` crosses the bridge to the native module.
+5. The returned landmarks are converted to one knee angle, smoothed, gated on confidence, and
+   then drive the state machine.
+6. The `finally` block deletes that JPEG. A sweep of the same directory on screen mount reclaims
+   files left by a session that never reached its `finally` (crash, force-close).
 
 `catch` at `:266-267` swallows all errors silently (snapshot failure, decode failure, native rejection).
 
@@ -61,56 +68,69 @@ The loop lives at `app/(tabs)/workout.tsx:240-274`:
 - `release()` (`:91-95`) only nulls the reference; it never calls `close()` on the MediaPipe graph.
 - Gradle dependency: `com.google.mediapipe:tasks-vision:0.10.14` (`android/app/build.gradle:183`).
 
-### Angle computation and camera mode
+### Angle computation and confidence gate
 
-| Mode | Function | Behavior |
-|---|---|---|
-| `side` (default) | `calcSideAngle` — `app/(tabs)/workout.tsx:152-165` | Sums `visibility` of hip+knee+ankle per leg, measures the higher-scoring leg. `>=` ties to the left leg. No minimum-visibility floor. |
-| `front` | `calcFrontAngle` — `app/(tabs)/workout.tsx:168-173` | Averages both legs' knee angles. Visibility is ignored. |
+**Side view is the only supported capture.** The `side`/`front` toggle was removed; the UI now states the
+requirement ("Stand sideways to the camera") instead of offering a choice.
 
-`cameraMode` defaults to `'side'` (`:181`, ref mirror at `:194`). Note that `useCameraDevice('front')` (`:180`)
-means the **physical camera is always the selfie camera** regardless of mode; `cameraMode` only changes the math.
+`measureSide(landmarks)` sums `visibility` of hip+knee+ankle per leg and measures the higher-scoring leg
+(`>=` still ties to the left). It returns `{ angle, leg, minVis }`, where `minVis` is the **weakest** of that
+leg's three joint confidences — reported rather than pre-filtered, so the caller can both gate on it and log it.
+
+A frame is **excluded from judgement** when the native module returns no pose, or when `minVis < MIN_VISIBILITY`.
+On exclusion the EMA and both streak counters reset, `phaseRef` is **preserved** (tracking can drop mid-squat),
+and `setAngle` is not called, so the on-screen readout holds its last measured value rather than blanking.
+
+Note that `useCameraDevice('front')` selects the **physical selfie camera** — it is unrelated to the
+removed front/side judgement mode, and is unchanged.
 
 ### State machine and thresholds
 
+The comparison runs on the **EMA-smoothed** angle, never the raw frame angle, and each transition
+requires `CONFIRM_FRAMES` consecutive qualifying frames.
+
 ```
-up   --(kneeAngle < 110)--------------------------> down
-down --(kneeAngle > 150 side | > 160 front)------->  up   [+1 rep]
+up   --(ema <= 110, 3 consecutive frames)--> down
+down --(ema >= 150, 3 consecutive frames)-->  up   [+1 rep]
 ```
 
-| Constant | Value | Location |
+| Constant | Value | Notes |
 |---|---|---|
-| Down threshold | `kneeAngle < 110` | `app/(tabs)/workout.tsx:259` |
-| Up threshold (side) | `kneeAngle > 150` | `app/(tabs)/workout.tsx:261` |
-| Up threshold (front) | `kneeAngle > 160` | `app/(tabs)/workout.tsx:261` |
-| Detection interval | `100` ms | `app/(tabs)/workout.tsx:271` |
-| Snapshot quality | `30` | `app/(tabs)/workout.tsx:247` |
-| Daily target / auto-stop | `TARGET = 30` | `app/(tabs)/workout.tsx:20`, `:264` |
-| Points per rep | `POINTS_PER_REP = 5` | `app/(tabs)/workout.tsx:19` |
+| Down threshold | `KNEE_DOWN = 110` | `ema <= 110` |
+| Up threshold | `KNEE_UP = 150` | `ema >= 150` |
+| Smoothing | `EMA_ALPHA = 0.4` | seeded from the first good frame, so it never climbs down from 180 |
+| Transition confirmation | `CONFIRM_FRAMES = 3` | applies to **both** directions; both counters clear on a flip |
+| Confidence floor | `MIN_VISIBILITY = 0.5` | per joint, on the measured leg |
+| Tracking warning delay | `TRACKING_WARN_MS = 1000` | debounce, so brief dropouts do not flash a banner |
+| Detection interval | `100` ms | nominal; see the cadence note in Appendix A |
+| Snapshot quality | `30` | written to `<cache>/kinlog-snapshots`, deleted per frame |
+| Daily target / auto-stop | `TARGET = 30` | |
+| Points per rep | `POINTS_PER_REP = 5` | |
 
 One `up → down → up` cycle is one rep (`:259-264`). Reaching `TARGET` calls `stopSession()` from inside the
 interval callback. Session lifecycle: `startSession` (`:276-280`), `stopSession` (`:208-230`),
 `resetSession` (`:282-288`); the screen is held awake by `useKeepAwake()` (`:177`).
 
-The `Product Decisions — DO NOT` section of `CLAUDE.md` pins the 110° / 150° / 160° values as clinical PT
+The `Product Decisions — DO NOT` section of `CLAUDE.md` pins the 110° / 150° values as clinical PT
 calibration — coordinate before changing them.
 
 ### What the pipeline does not do
 
-Relevant to any accuracy work, all of the following are **absent**:
+Relevant to any further accuracy work, the following are still **absent**:
 
-- No smoothing of any kind — no EMA, moving average, or median filter. The raw per-frame angle drives the
-  comparison directly.
-- No consecutive-frame confirmation, no debounce, no minimum time in phase, no rep cooldown. A single frame
-  crossing a threshold flips the phase and, on the up-transition, immediately counts a rep.
-- No standing baseline or reference pose. `setAngle(180)` at `:278`/`:287` is UI initialization only.
+- No standing baseline or reference pose. `setAngle(180)` on session start is UI initialization only.
 - No hip-descent, torso-length, or scale-normalization logic. Hips are used solely as the first vertex of the
   knee angle.
-- No shoulder landmarks. Indices 11/12 are never requested by the native module and appear nowhere in the repo,
-  so torso length is not computable from the current bridge output.
-- No visibility floor or confidence gate. Visibility only selects which leg to measure in side mode.
-- No validation of pose presence beyond `if (!landmarks) return` (`:250`).
-- Snapshot temp files are never deleted during a session.
+- No shoulder landmarks. Indices 11/12 are never requested by the native module, so torso length is not
+  computable from the current bridge output. (Planned: Phase 2.)
+- `z` is hard-coded to `0.0` in the native module, so every angle is a 2D image-plane angle.
+- No rotation, EXIF, mirror, or resize handling before `lm.detect()`.
+- MediaPipe's own `setMinPoseDetectionConfidence` / `setMinPosePresenceConfidence` / `setMinTrackingConfidence`
+  are not set, so library defaults apply. The app's confidence gate is applied downstream, in JS.
+- The detection loop's `catch` still swallows every error silently (snapshot, decode, native rejection).
+
+Resolved (Phase 1): EMA smoothing, 3-frame transition confirmation, a per-joint visibility floor, and
+per-frame deletion of snapshot temp files.
 
 ---
 
@@ -572,23 +592,48 @@ No `NOTICE`, `COPYING`, `THIRD_PARTY_LICENSES`, or `licenses/` directory exists 
 
 Target criteria under consideration, against what the code does today.
 
+Target criteria against the code, after Phase 1. The owner (a physical therapist) set the up threshold to
+**150°** on 2026-09-22; the earlier "≥ 160°" target in this table is superseded.
+
 | Item | Target criterion | Current implementation | Difference |
 |---|---|---|---|
-| Down | Knee ≤ 110° **and** hip descent ≥ 20% of torso length (both required) | `kneeAngle < 110` alone — `workout.tsx:259` | **No hip-descent condition.** Knee angle is the only signal. Boundary is `<`, not `≤`. |
-| Up | Knee ≥ 160° | `> 150` in side mode, `> 160` in front mode — `workout.tsx:261` | **The default mode (side) uses 150°**, 10° below target. Boundary is `>`, not `≥`. |
-| One rep | Returning from down to up | Same — `workout.tsx:261-263` | Matches. |
-| Torso length | Distance from shoulder to hip on the same side | Not computed. The native module returns **only landmarks 23–28** — `PoseLandmarkerModule.kt:77-83` | Shoulders (11/12) are not returned, so this requires a **native module change**, not a JS-only change. |
-| Baseline | Refreshed while standing, frozen during descent; no baseline ⇒ no counting | None. `setAngle(180)` (`:278`, `:287`) is UI initialization, not a reference pose. | Entirely new. Requires per-frame standing detection plus a hold/freeze rule. |
-| Smoothing | EMA 0.4 | None — the raw per-frame angle drives the comparison. | Entirely new. |
-| Transition confirmation | 3 consecutive frames | None — a single frame crossing a threshold flips the phase and counts the rep immediately. | Entirely new. One noisy frame currently produces one phantom rep. |
-| Capture | Side view | `side` / `front` toggle, default `side` (`:181`). The physical camera is always the front-facing selfie camera (`:180`). | Decide whether front mode is removed or kept. |
-| Daily target | 30 reps | `TARGET = 30` (`:20`) | Matches. |
+| Down | Knee ≤ 110° **and** hip descent ≥ 20% of torso length (both required) | `ema <= KNEE_DOWN` (110), 3 consecutive frames | **Hip-descent condition still missing** — knee angle is the only signal. Boundary now `≤`. (Planned: Phase 2.) |
+| Up | Knee ≥ 150° | `ema >= KNEE_UP` (150), 3 consecutive frames | Matches. |
+| One rep | Returning from down to up | Same | Matches. |
+| Torso length | Distance from shoulder to hip on the same side | Not computed. The native module returns **only landmarks 23–28**. | Shoulders (11/12) are not returned, so this needs a **native module change**, not a JS-only change. (Planned: Phase 2.) |
+| Baseline | Refreshed while standing, frozen during descent; no baseline ⇒ no counting | None. `setAngle(180)` is UI initialization, not a reference pose. | Entirely new. (Planned: Phase 2.) |
+| Smoothing | EMA 0.4 | `EMA_ALPHA = 0.4`, seeded from the first good frame; reset whenever a frame is excluded. | Matches. |
+| Transition confirmation | 3 consecutive frames | `CONFIRM_FRAMES = 3`, applied in **both** directions. | Matches. |
+| Confidence gate | Exclude low-confidence frames | `MIN_VISIBILITY = 0.5` on the weakest joint of the measured leg; excluded frames reset the EMA and streaks but preserve the phase. | Matches. Provisional value — tune from the `lowvis` share in the session log. |
+| Capture | Side view | Side view only. The front/side toggle was removed; the UI states the requirement instead. | Matches. |
+| Temp files | Not retained | Written to `<cache>/kinlog-snapshots`, deleted per frame, directory swept on screen mount. | Matches. |
+| Daily target | 30 reps | `TARGET = 30` | Matches. |
 
 Two implementation notes for the differing rows:
 
-- **Frame cadence.** The loop ticks every 100 ms (`:271`), so three consecutive frames is nominally ~300 ms, but
-  snapshot capture plus inference latency means the effective interval is longer and irregular. A frame-count
-  rule and a wall-clock rule are not interchangeable here.
+- **Frame cadence — measured, not assumed.** The loop ticks every 100 ms, but `detectingRef` skips a tick
+  whenever a detection is still in flight, and on a Solana Seeker (release APK, 2026-09-22, four sessions,
+  832 frames) the real cadence is **dt p50 = 348 ms, avg ≈ 315 ms, p95 = 367 ms, max = 400 ms** — about
+  **2.9 fps**, roughly 3.5x slower than the nominal interval. A frame-count rule and a wall-clock rule are
+  therefore very different things here.
+
+  The consequence is a hard sampling budget per rep:
+
+  | Cadence | Slow rep (~4.6 s) | Fast rep (~2.0 s) |
+  |---|---|---|
+  | Frames available at dt ≈ 350 ms | ~13 | ~5.8 |
+
+  `CONFIRM_FRAMES = 3` needs 3 qualifying frames at the bottom **and** 3 at the top, i.e. ≥ 6 frames per rep
+  before any are spent on the descent and ascent. A ~2 s rep does not supply them, so fast reps are
+  arithmetically uncountable at this cadence — measured 3 of 10, against 10 of 10 for slow reps. Lowering
+  `CONFIRM_FRAMES` does not rescue it (replaying the captured frames gives 5 at C=2 and 6 at C=1): the frames
+  do not exist to be confirmed. Raising the sample rate is the only fix that reaches both ends of the range.
+
+- **Confidence floor — measured.** Across the same sessions, accepted frames had median `minVis` 0.86 while
+  rejected ones had median 0.17 (max 0.50), a clean bimodal split rather than borderline thrashing, and
+  rejections clustered in each session's first third (getting into position) rather than during the squat.
+  `MIN_VISIBILITY = 0.5` sits in the empty gap between the two modes; lowering it to 0.4 would recover almost
+  nothing. The 12–24 % `lowvis` share per session is mostly setup time, not lost reps.
 - **Coordinate space.** Landmarks are normalized to the image and `z` is hard-coded to `0.0`
   (`PoseLandmarkerModule.kt:69`), with `y` increasing downward. Hip descent is therefore a `hip.y` increase in
   normalized units, and must be scaled by a torso length measured in the same units to be

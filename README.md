@@ -93,9 +93,13 @@ The squat detection is not arbitrary.
 
 MediaPipe Pose Landmarker tracks 33 joint positions in real time. Kinlog uses three: **hip, knee, ankle.**
 
-- Below **110°** = counted as "down"
-- Above **160°** = counted as "up"
+- **110° or below** = counted as "down"
+- **150° or above** = counted as "up"
 - Only this sequence = 1 rep
+
+Camera noise does not get a vote. The knee angle is smoothed before it is judged, a phase
+only flips after three consecutive frames agree, and any frame where the joints are not
+clearly visible is thrown out instead of counted. One bad frame can no longer invent a rep.
 
 **Why these numbers?**
 
@@ -147,9 +151,9 @@ For the first time, years of clinical knowledge became a single algorithm.
 ## How It Works
 
 1. Open the app and connect your Solana wallet
-2. Go to the Workout screen. Position yourself so your full body is in frame
+2. Go to the Workout screen. Stand **sideways** to the camera, with your full body in frame
 3. The AI tracks your hip, knee, and ankle in real time
-4. Squat below 110° knee angle → stand above 160° → that is 1 rep
+4. Squat to 110° knee angle or below → stand back to 150° or above → that is 1 rep
 5. Hit 30 reps to complete your daily goal
 6. Earn points. Build streaks. Receive badge rewards as permanent proof
 7. Stake SKR to unlock Legendary badges

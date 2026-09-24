@@ -56,3 +56,18 @@ android/app/*.keystore
 
 # Claude Code local settings (personal, not shared)
 .claude/settings.local.json
+
+# Solana / Anchor (Locked In program). Keypairs live in ~/.config/kinlog/, never here.
+target/
+.anchor/
+test-ledger/
+.surfpool/
+**/*keypair*.json
+id.json
+
+# Cloud Functions local secrets
+functions/.env*
+functions/.secret.local
+
+# Private notes (revenue model, simulations). Never committed.
+docs/private/

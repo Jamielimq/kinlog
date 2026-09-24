@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Kinlog — Expo (bare workflow) React Native fitness dApp targeting **Android / Solana Seeker**. AI-powered squat counting via on-device MediaPipe; achievements stored in Firestore and "minted" by paying SOL on Solana Mainnet. iOS is configured but not the primary target (the pose detector is Android-only).
 
-Tagline: **"Move · Earn · Evolve"**. Built for the MONOLITH Solana Mobile Hackathon 2026, connected to RadiantsDAO. **Currently live on the Solana dApp Store**, Lifestyle category, version 1.1.0 (`versionCode 4`) — bumping these in `android/app/build.gradle` is a release-affecting change.
+Tagline: **"Move · Earn · Evolve"**. Built for the MONOLITH Solana Mobile Hackathon 2026, connected to RadiantsDAO. **Currently live on the Solana dApp Store**, Lifestyle category, version 1.3.3 (`versionCode 9`) — bumping these in `android/app/build.gradle` is a release-affecting change.
 
 Subsystem reference — squat detection, Firestore data model, challenge flow, badge minting, MWA signing, licensing: `docs/ARCHITECTURE.md`.
 
@@ -104,6 +104,15 @@ Both `shares` (UserStake offset 105) and `share_price` (StakeConfig offset 137) 
 
 `EXPO_PUBLIC_HELIUS_API_KEY` is now optional: if set, the hook uses Helius RPC for higher rate limits, otherwise it falls back to `https://api.mainnet-beta.solana.com`. The hook also best-effort `deleteDoc`s the legacy `users/{addr}/cache/skr_staking` document on every run to drain dead data left over from the pre-PDA implementation; the delete is wrapped in its own try/catch so a rules denial or missing doc is silent.
 
+### Locked In (in progress on `feat/locked-in`)
+Deposit-backed rework of the 3-Day / 7-Day Challenge: 100 SKR deposit + 0.001 SOL Fee, 30 squats a day, then one pick on a 5×5 board whose tier (Common / Rare / Legendary Square) comes from an ORE mining round, paid in ORE from a program vault. Full design: `docs/LOCKED_IN.md`. Revenue modelling lives in `docs/private/` (gitignored; never commit it).
+- **Day boundary is 15:00 UTC (00:00 KST) for everything Locked In** — on-chain cohort times, server daily totals, app copy. The rest of the app still uses the device's local midnight; don't mix the two.
+- **ORE mining program is `oreV3EG1i9BEgiAJ8b177Z2S2rMarzak4NMv1kULvWv`.** `mineRHF5r6S7HyD9SppBfVMXMavDkJsxwGesEvxZr2A` is the legacy v1 program; don't use it. ORE stake program (post-June-2026): `stakecNP3FpiExZPCgZfqRgumVzi6dNqnfrjwXyTgeH`.
+- **Four key roles.** Admin = Squads 2-of-3 (laptop, sorak.skr, jamielim.skr): upgrades, role rotation, limits, `fee_wallet`, deposit pause. Server keys (in `~/.config/kinlog/` and Secret Manager, never in the repo): **cohort creator** (creates cohorts within limits, pays their rent), **attester** (marks success, nothing else), **crank** (settle, retarget, return, close). No key can move deposits or reward ORE anywhere the program's rules don't send them.
+- **Program invariants — never weaken:** the only way ORE leaves the reward vault is `claim_reward`; deposits go only back to the depositor; nothing leaves an SKR vault before the cohort ends (there is no cancel instruction).
+- **Copy rules (Locked In screens):** English; no middle dots or em dashes; say "Square" and "Reward", never "box"; no multipliers, jackpot wording or dollar conversions; odds appear only on the join screen's ⓘ Reward odds sheet.
+- Mainnet deploys, any transaction that spends SOL or ORE, and Squads transfers or setting changes need the owner's explicit go-ahead each time.
+
 ## Conventions
 
 - TypeScript strict mode; path alias `@/*` → repo root (defined in `tsconfig.json`, currently underused — most code uses relative imports).
@@ -115,6 +124,11 @@ Both `shares` (UserStake offset 105) and `share_price` (StakeConfig offset 137) 
 
 These are settled product/legal decisions, not open questions. Re-litigate with the owner before changing any of them.
 
-- **DO NOT add direct SOL or token payouts to users.** Direct on-chain rewards risk gambling / prize-regulation classification, which varies by country. The reward design is intentionally NFT badges + a points leaderboard. Any token-denominated reward needs legal review first.
-- **DO NOT charge SKR (or any token) as a minting fee.** Gating activation behind a token purchase was explicitly rejected. The current 0.001 SOL transfer is the only sanctioned fee path.
+- **DO NOT add direct SOL or token payouts to users** — with exactly one owner-approved exception (2026-09-25): the **Locked In Reward (ORE)**. Direct on-chain rewards risk gambling / prize-regulation classification, which varies by country; otherwise the reward design stays NFT badges + a points leaderboard. The exception holds only while all of these stay true:
+  - Picking a Square is free and has no losing outcome (the minimum tier is Common).
+  - The reward budget is marketing budget, kept separate from Fee revenue; the vault is filled from the marketing budget.
+  - The amount rule (1×, 2×, 20× the Fee's value, priced at cohort creation) and the per-cohort tier caps are public rules (`docs/LOCKED_IN.md`).
+  Any other SOL or token payout is still forbidden.
+- **DO NOT charge SKR (or any token) as a minting fee.** Gating activation behind a token purchase was explicitly rejected. **The Locked In deposit is not a fee:** it is returned 100%, pass or fail, to an address the program fixes to the depositor. Withholding or forfeiting any part of a deposit is forbidden.
+- **Fees are SOL only, never SKR.** There are exactly two: the Locked In **Fee** (0.001 SOL, paid inside the `deposit` instruction, non-refundable, project revenue) and the optional badge **mint fee** (0.001 SOL, badges tab). The old 0.001 SOL charged on quest claim is removed.
 - **DO NOT modify the squat angle thresholds (110° / 150°)** in `app/(tabs)/workout.tsx` without explicit coordination. These are clinical PT calibration values, not arbitrary numbers. On 2026-09-22 the owner (a physical therapist) authorised the current set directly: boundaries moved to `≤ 110°` / `≥ 150°`, front mode was removed so side view is the only supported capture, and a 0.5 visibility floor was added. On 2026-09-23, after on-device measurement, smoothing and multi-frame confirmation were removed entirely: judgement is the raw angle on a single frame (EMA 0.4 → median-3 → none). **The 110° and 150° values themselves have never changed** — that work existed only to stop the pipeline from masking them, and removing it was what finally stopped it. That approval covers those changes only; this clause still stands for any further change.

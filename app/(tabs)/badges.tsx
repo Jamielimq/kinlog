@@ -99,6 +99,14 @@ export default function BadgesScreen() {
         txSignature = signatures[0]
       })
 
+      // A missing signature must not flip the badge to "Claimed" - the UI keys off
+      // mintedAt alone, so an empty write would lock the badge out permanently.
+      // Deliberately not claiming the user wasn't charged: the transaction may well
+      // have been submitted, and the app has no way to know either way.
+      if (typeof txSignature !== 'string' || txSignature.length === 0) {
+        throw new Error("Couldn't confirm the transaction. Please try again.")
+      }
+
       // Save mint record to Firebase
       const db = getFirestore(getApp())
       const mintedBadgeData = badges.find(b => b.id === badgeId)

@@ -181,6 +181,10 @@ Verified against `regolith-labs/ore` (`ore-api` 3.8.x, post-June-2026 "v4" layou
 - A round lasts `round_slots` (200) plus `intermission_slots` (40), about 96 s. Its result is written when
   anyone calls ORE's `reset` after the intermission. Round accounts can be closed about one day after they
   end, which is why settlement runs within a minute and `retarget` exists for the rare late case.
+- Checked on mainnet 2026-09-25 (round ~417,296): Board, Config and Round sizes, discriminators and
+  offsets match the table; consecutive rounds are ~241 slots apart and `expires_at` = end + 288,000 slots.
+  Across all 1,199 live Round accounts the motherlode rule above flagged exactly the 3 rounds whose
+  `motherlode` field is non-zero, with no false positives, which confirms the `rng` derivation.
 - The program validates owner, PDA address, discriminator and length before reading a Round. It does not
   link `ore-api` (dependency conflicts with Anchor); the math is ported and tested against the original.
 
@@ -263,6 +267,8 @@ If time allows: "Stake" as an alternative to "Receive to wallet", built as one t
 Stake / Unstake buttons. Funds move only between the user's wallet and ORE's stake program
 (`stakecNP3FpiExZPCgZfqRgumVzi6dNqnfrjwXyTgeH`, the post-June-2026 contract); Kinlog only builds the
 transaction.
+Stake accounts (checked on mainnet 2026-09-25, 2,244 accounts): 120 bytes, discriminator 108, PDA
+`["stake", authority]`, `balance` at offset 40.
 
 ## 10. Testing
 

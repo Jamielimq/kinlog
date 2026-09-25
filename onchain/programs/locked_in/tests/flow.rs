@@ -57,7 +57,7 @@ fn full_lifecycle() {
     env.set_round(501, Some(rng_for(7, false)));
     let meta = ok(env.settle_next(&crank, K, ID));
     println!("settle CU {}", meta.compute_units_consumed);
-    assert!(meta.logs.iter().any(|l| l.contains("Locked In settle: round 501 winning_square 7 picked 7 motherlode false tier 2")));
+    assert!(meta.logs.iter().any(|l| l.contains("Locked In settle: round 501 reason revealed winning_square 7 picked 7 motherlode false tier 2")));
     let s = env.slot_of(K, ID, &alice.pubkey());
     assert_eq!((s.tier, s.amount), (TIER_RARE, COMMON * 2));
 
@@ -170,50 +170,87 @@ fn settlement_is_caller_independent() {
 }
 
 #[test]
-fn retarget_only_when_round_unusable() {
+fn unusable_rounds_retarget_closed_rounds_pay_common() {
+    let (mut env, users, _) = cohort_at_last_day(2);
+    let (a, b) = (&users[0], &users[1]);
+    let payer = env.user(0);
+    let crank = env.crank.insecure_clone();
+    for u in [a, b] {
+        ok(env.mark_success(K, ID, &u.pubkey()));
+    }
+    env.set_board(700);
+    ok(env.pick(a, K, ID, 1)); // targets 701
+    ok(env.pick(b, K, ID, 1)); // targets 701
+    let r701 = locked_in::ore::round_address(701);
+
+    // Not revealed yet (board still on 700, round 701 not created): settle and retarget both refuse.
+    expect_err(env.settle_next(&crank, K, ID), "RoundNotRevealed");
+    let ix = env.retarget_ix(K, ID, a.pubkey(), r701);
+    expect_err(env.send(&[ix], &[&payer]), "RetargetNotAllowed");
+    // Created but not revealed (board on 701): same.
+    env.set_board(701);
+    env.set_round(701, None);
+    expect_err(env.settle_next(&crank, K, ID), "RoundNotRevealed");
+    let ix = env.retarget_ix(K, ID, a.pubkey(), r701);
+    expect_err(env.send(&[ix], &[&payer]), "RetargetNotAllowed");
+
+    // Finished without entropy (board past it, slot hash all 0xFF): settle refuses, retarget moves it.
+    env.set_board(705);
+    let mut acc = env.svm.get_account(&r701).unwrap();
+    acc.data[616..648].copy_from_slice(&[0xFF; 32]);
+    env.svm.set_account(r701, acc).unwrap();
+    expect_err(env.settle_next(&crank, K, ID), "RoundNeedsRetarget");
+    let ix = env.retarget_ix(K, ID, a.pubkey(), r701);
+    let meta = ok(env.send(&[ix], &[&payer]));
+    assert!(meta.logs.iter().any(|l| l.contains("Locked In retarget: round 701 finished without entropy, new target 706")));
+    let s = env.slot_of(K, ID, &a.pubkey());
+    assert_eq!((s.target_round, s.pick_seq), (706, 0));
+
+    // A revealed round cannot be retargeted.
+    env.set_board(800);
+    env.set_round(706, Some(rng_for(1, true)));
+    let ix = env.retarget_ix(K, ID, a.pubkey(), locked_in::ore::round_address(706));
+    expect_err(env.send(&[ix], &[&payer]), "RetargetNotAllowed");
+
+    // A closed round cannot be retargeted either; it settles as Common.
+    env.remove(locked_in::ore::round_address(706));
+    let ix = env.retarget_ix(K, ID, a.pubkey(), locked_in::ore::round_address(706));
+    expect_err(env.send(&[ix], &[&payer]), "RetargetNotAllowed");
+    let meta = ok(env.settle_next(&crank, K, ID));
+    assert!(meta.logs.iter().any(|l| l.contains("Locked In settle: round 706 reason round_closed winning_square 255 picked 1 motherlode false tier 1")));
+    let s = env.slot_of(K, ID, &a.pubkey());
+    assert_eq!((s.tier, s.amount), (TIER_COMMON, COMMON));
+    assert_eq!(env.cohort(K, ID).legendary_awarded, 0);
+
+    // b still targets 701 (no entropy, board past it). A fake empty account cannot stand in for
+    // its round: the address must be the round's PDA.
+    let fake = solana_keypair::Keypair::new().pubkey();
+    let ix = env.settle_ix(K, ID, fake);
+    expect_err(env.send(&[ix], &[&crank]), "InvalidRound");
+    let ix = env.retarget_ix(K, ID, b.pubkey(), fake);
+    expect_err(env.send(&[ix], &[&payer]), "InvalidRound");
+    let ix = env.retarget_ix(K, ID, b.pubkey(), r701);
+    ok(env.send(&[ix], &[&payer]));
+    env.set_round(801, Some(rng_for(1, false)));
+    ok(env.settle_next(&crank, K, ID));
+    assert_eq!(env.slot_of(K, ID, &b.pubkey()).tier, TIER_RARE);
+}
+
+#[test]
+fn closed_round_is_common_only_once_ore_moved_past_it() {
+    // An empty PDA for a round ORE has not reached yet must not be read as "closed".
     let (mut env, users, _) = cohort_at_last_day(1);
     let u = &users[0];
-    let payer = env.user(0);
     ok(env.mark_success(K, ID, &u.pubkey()));
-    env.set_board(700);
-    ok(env.pick(u, K, ID, 1));
-    let target = locked_in::ore::round_address(701);
-
-    // Board has not moved past the target: not allowed even if the round is missing.
-    let ix = env.retarget_ix(K, ID, u.pubkey(), target);
-    expect_err(env.send(&[ix], &[&payer]), "RetargetNotAllowed");
-
-    // Round revealed normally: not allowed.
-    env.set_board(705);
-    env.set_round(701, Some(rng_for(2, false)));
-    let ix = env.retarget_ix(K, ID, u.pubkey(), target);
-    expect_err(env.send(&[ix], &[&payer]), "RetargetNotAllowed");
-
-    // Wrong account for the target round: rejected.
-    let wrong = locked_in::ore::round_address(702);
-    let ix = env.retarget_ix(K, ID, u.pubkey(), wrong);
-    expect_err(env.send(&[ix], &[&payer]), "InvalidRound");
-
-    // Round finished without entropy (all 0xFF): allowed.
-    env.set_round(701, None);
-    let mut acc = env.svm.get_account(&target).unwrap();
-    acc.data[616..648].copy_from_slice(&[0xFF; 32]);
-    env.svm.set_account(target, acc).unwrap();
-    let ix = env.retarget_ix(K, ID, u.pubkey(), target);
-    ok(env.send(&[ix], &[&payer]));
-    assert_eq!(env.slot_of(K, ID, &u.pubkey()).target_round, 706);
-
-    // New target closed after expiry: allowed again, keeps pick order.
-    env.set_board(800);
-    env.remove(locked_in::ore::round_address(706));
-    let ix = env.retarget_ix(K, ID, u.pubkey(), locked_in::ore::round_address(706));
-    ok(env.send(&[ix], &[&payer]));
-    let s = env.slot_of(K, ID, &u.pubkey());
-    assert_eq!((s.target_round, s.pick_seq), (801, 0));
-    env.set_round(801, Some(rng_for(1, false)));
+    env.set_board(50);
+    ok(env.pick(u, K, ID, 9)); // targets 51, which does not exist yet
     let crank = env.crank.insecure_clone();
+    expect_err(env.settle_next(&crank, K, ID), "RoundNotRevealed");
+    env.set_board(51); // round 51 is the live round now; its PDA still empty here
+    expect_err(env.settle_next(&crank, K, ID), "RoundNotRevealed");
+    env.set_board(52); // ORE moved past 51 and its account is gone
     ok(env.settle_next(&crank, K, ID));
-    assert_eq!(env.slot_of(K, ID, &u.pubkey()).tier, TIER_RARE);
+    assert_eq!(env.slot_of(K, ID, &u.pubkey()).tier, TIER_COMMON);
 }
 
 #[test]

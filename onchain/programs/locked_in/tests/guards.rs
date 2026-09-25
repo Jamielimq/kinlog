@@ -475,15 +475,16 @@ fn settle_rejects_forged_rounds_and_keeps_order() {
     env.set_board(110);
     ok(env.pick(b, K, ID, 1)); // targets 111
 
-    // b's round is revealed first; a's is not. Order holds: a first.
+    // b's round is revealed first; a's is not (board rewound to 101: a's round is live). Order holds.
     env.set_round(111, Some(rng_for(1, true)));
     env.set_round(101, None);
+    env.set_board(101);
     expect_err(env.settle_next(&payer, K, ID), "RoundNotRevealed");
     let ix = env.settle_ix(K, ID, locked_in::ore::round_address(111));
     expect_err(env.send(&[ix], &[&payer]), "InvalidRound");
 
-    // Forgeries of a's round: foreign owner at the right address (treated as not available),
-    // wrong id inside, wrong size.
+    // Forgeries of a's round while ORE has not moved past it: a foreign-owned account at the right
+    // address is "not available", a wrong id inside or a wrong size is rejected outright.
     let r101 = locked_in::ore::round_address(101);
     let mut data = fixture_data(&fixture("round_417350"));
     data[8..16].copy_from_slice(&101u64.to_le_bytes());
@@ -493,10 +494,16 @@ fn settle_rejects_forged_rounds_and_keeps_order() {
     expect_err(env.settle_next(&payer, K, ID), "RoundNotRevealed");
     let mut wrong_id = data.clone();
     wrong_id[8..16].copy_from_slice(&111u64.to_le_bytes());
-    env.set_raw(r101, ORE_PROGRAM_ID, wrong_id);
+    env.set_raw(r101, ORE_PROGRAM_ID, wrong_id.clone());
     expect_err(env.settle_next(&payer, K, ID), "InvalidRound");
     let mut short = data.clone();
     short.truncate(900);
+    env.set_raw(r101, ORE_PROGRAM_ID, short.clone());
+    expect_err(env.settle_next(&payer, K, ID), "InvalidRound");
+    // Still rejected once ORE is past it: a malformed ORE-owned account never reads as "closed".
+    env.set_board(112);
+    env.set_raw(r101, ORE_PROGRAM_ID, wrong_id);
+    expect_err(env.settle_next(&payer, K, ID), "InvalidRound");
     env.set_raw(r101, ORE_PROGRAM_ID, short);
     expect_err(env.settle_next(&payer, K, ID), "InvalidRound");
 

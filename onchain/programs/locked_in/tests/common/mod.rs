@@ -501,6 +501,7 @@ impl Env {
             &locked_in::instruction::Settle {}.data(),
             locked_in::accounts::Settle {
                 cohort: cohort_pda(kind, id),
+                ore_board: ORE_BOARD,
                 ore_round: round,
             }
             .to_account_metas(None),

@@ -36,6 +36,9 @@ pub struct SquareSettled {
     pub cohort: Pubkey,
     pub user: Pubkey,
     pub round_id: u64,
+    /// 0 = result read from the round, 1 = round closed before settlement (paid Common).
+    pub reason: u8,
+    /// 255 when the round was closed.
     pub winning_square: u8,
     pub picked_square: u8,
     pub motherlode: bool,

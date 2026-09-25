@@ -153,8 +153,8 @@ closes. Account rent is paid once by the cohort-creator wallet and returns to it
 | `return_deposit` | crank after end; anyone after end + 5 days | destination is always the depositor's SKR associated token account (created by the caller if missing) |
 | `mark_success` | attester | from the start of the last day until end + 5 days; sets the success flag and nothing else |
 | `pick_square` | successful participant | until end + 5 days; the program reads ORE's Board itself and records `round_id + 1` as the target |
-| `settle` | anyone | takes no participant argument: it always settles the next pick in recording order, reading that pick's target Round (validated); applies caps; logs round, winning square, pick, motherlode flag, tier, amount |
-| `retarget` | anyone | only once ORE's board has moved past the target and that round is unusable (finished without entropy, or already closed); moves the target to the current round + 1; pick order is kept. A round that is merely not revealed yet cannot be skipped |
+| `settle` | anyone | takes no participant argument: it always settles the next pick in recording order. Reads ORE's Board and the pick's target Round at its exact PDA. Revealed round: tier from its result, then caps. Round **closed** after ORE moved past it: **Common** (no re-draw). Finished without entropy: refused, see `retarget`. Not revealed yet: refused. Logs round, reason (`revealed` / `round_closed`), winning square, pick, motherlode flag, tier, amount |
+| `retarget` | anyone | only once ORE's board has moved past the target and that round **finished without entropy**; moves the target to the current round + 1 and keeps pick order. A closed round is not retargeted (it settles as Common), and a round not revealed yet cannot be skipped |
 | `claim_reward` | participant | after settlement, until end + 5 days; ORE goes from the reward vault to the participant's ORE associated token account (created at the participant's expense if missing) |
 | `close_cohort` | anyone, after end + 5 days | requires every deposit to be returned; burns any SKR dust someone sent into the vault (so a stray transfer cannot block closing); releases the unused reservation; closes the vault and cohort, rent to `creator` |
 
@@ -183,7 +183,11 @@ Verified against `regolith-labs/ore` (`ore-api` 3.8.x, post-June-2026 "v4" layou
 - Winning square = `rng % 25`. Motherlode hit = `rng.reverse_bits() % 500 == 0`.
 - A round lasts `round_slots` (200) plus `intermission_slots` (40), about 96 s. Its result is written when
   anyone calls ORE's `reset` after the intermission. Round accounts can be closed about one day after they
-  end, which is why settlement runs within a minute and `retarget` exists for the rare late case.
+  end. Settlement normally runs within a minute; a pick still unsettled when its round has been closed is
+  paid **Common** rather than re-drawn. Re-drawing there would let someone who saw a bad result wait out a
+  stalled crank (about 32 hours) and try again. Only a round that finished *without entropy* is
+  retargeted, and "closed" is recognised only at the round's exact PDA and only once ORE's board has moved
+  past it (the same PDA is also empty before ORE creates the round).
 - Checked on mainnet 2026-09-25 (round ~417,296): Board, Config and Round sizes, discriminators and
   offsets match the table; consecutive rounds are ~241 slots apart and `expires_at` = end + 288,000 slots.
   Across all 1,199 live Round accounts the motherlode rule above flagged exactly the 3 rounds whose
@@ -290,17 +294,68 @@ visibility.
 
 ## 11. Deployment
 
-- **Program size:** about 342 KB (release profile `opt-level = "z"`; 399 KB at the default level). Measured
-  compute: deposit ~19k CU, pick ~4k, settle ~7k, claim ~38k including ORE account creation.
-- **Rent** at the current rate (5,080 lamports/byte after SIMD-0437 step 2; further cuts expected late 2026):
-  program data about 1.74 SOL, locked while the program exists; a buffer of the same size is needed during
-  deployment and refunded afterwards, so about 3.5 SOL must be on hand at deploy time. Per cohort: the
-  1,808-byte cohort account plus the SKR vault, about 0.011 SOL, returned to the cohort creator on close.
-  Rent amounts shown in the app are queried at runtime, never hard-coded.
-- **Build format:** SBPFv3 (Anchor 1.2 default). Mainnet enabled v3 deployment at epoch 993, and a pending
-  feature (SIMD-0500) would stop new v0-v2 deployments.
-- **Verifiable build:** to be confirmed with `solana-verify build` (needs Docker) before mainnet; the
-  deploy steps will then be written here around the verifiable artifact.
-- Upgrade authority: a Squads v4 2-of-3 vault.
+### Build
+
+- **Verifiable build** (the artifact that is deployed):
+  `solana-verify build --library-name locked_in --arch v3 -b solanafoundation/solana-verifiable-build:4.1.2 <abs path>/onchain`.
+  Two flags are required: `--arch v3` (solana-verify defaults to v0; Anchor 1.2 targets SBPFv3, which mainnet
+  enabled at epoch 993) and an explicit 4.1.x base image (the auto-selected image ships Cargo 1.84, which cannot
+  parse the edition-2024 crates Anchor 1.2 pulls in). Pass an absolute mount path: with `.` the tool builds
+  a broken manifest path. The build takes about 75 s after the image is cached.
+- Size: 356,168 bytes (the in-container toolchain differs from a host `anchor build`, 342 KB). Program data is
+  allocated with a 10% margin (`--max-len 392000`) so small fixes can be upgraded in place.
+- Measured compute: deposit ~19k CU, pick ~4k, settle ~7k, claim ~38k including ORE account creation.
+
+### Costs (mainnet rent at 5,080 lamports/byte, SIMD-0437 step 2)
+
+| Item | SOL | Notes |
+|---|---|---|
+| Program data (392,000 bytes) | 1.992 | locked while the program exists |
+| Deploy buffer (356,168 bytes) | 1.810 | needed during deploy, refunded at the end |
+| **Needed on hand at deploy** | **~3.81** | plus a few thousand lamports of write-transaction fees |
+| Config + reward vault | 0.003 | |
+| Squads multisig | ~0.003 | creation fee is 0 (program config) |
+| Each cohort (account + SKR vault) | 0.011 | returned to the cohort creator on close |
+| A later upgrade | ~1.81 on hand | buffer rent, refunded to the spill address after the upgrade |
+
+### Mainnet runbook
+
+Every step that touches mainnet is run only after the owner approves that exact command. Scripts live in
+`onchain/scripts` (`npx tsx li.ts <command> --cluster mainnet --confirm-mainnet ...`); every command prints the
+network first, takes explicit keypair paths, and supports `--dry-run`. Rehearsed end to end on a local
+Agave 4.1.2 validator with mainnet clones of the Squads program, SKR and ORE mints, and real ORE round data
+(settlement read a real round and produced the tier ORE's own event records).
+
+1. **Build and hash.** Verifiable build as above; record `solana-verify get-executable-hash`.
+2. **Deploy** with the dedicated deploy key as payer and temporary upgrade authority:
+   `solana program deploy <so> --url mainnet-beta --program-id <program keypair> --keypair <deploy key> --upgrade-authority <deploy key> --max-len 392000`.
+   Check `solana-verify get-program-hash <program id>` equals step 1.
+   *If it fails midway*: `solana program show --buffers --buffer-authority <deploy key>` then
+   `solana program close --buffers --buffer-authority <deploy key> --keypair <deploy key>` recovers the buffer
+   rent; re-run the deploy (or resume with `--buffer <buffer>`).
+3. **Squads 2-of-3** (`squads-create`), members: laptop key, jamielim.skr, isollim.skr. Use the printed **vault**
+   address, not the multisig account, for everything below.
+4. **Vault check before any authority moves**: a memo proposal from the vault, approved from both signer phones
+   in the Squads app, then executed. Compare the vault address shown in the app with step 3.
+5. **init_config** with the deploy key (still the upgrade authority): admin = vault, roles = server keys,
+   fee wallet, limits.
+6. **Transfer the upgrade authority** to the vault:
+   `solana program set-upgrade-authority <program id> --new-upgrade-authority <vault> --skip-new-upgrade-authority-signer-check --upgrade-authority <deploy key> --keypair <deploy key> --url mainnet-beta`.
+7. **Verification (OtterSec).** The verification record must be uploaded by the current upgrade authority, so
+   after step 6 it goes through Squads: `solana-verify export-pda-tx <repo> --program-id <id> --uploader <vault>
+   --mount-path onchain --library-name locked_in --arch v3 -b <image> --commit-hash <commit>`, propose it with
+   `squads-propose --action import-tx`, approve, execute, then
+   `solana-verify remote submit-job --program-id <id> --uploader <vault>`.
+8. **Fund the reward vault** from the deploy wallet with a checked transfer into the vault token account
+   (`fund-reward-vault`), first 0.001 ORE, then the rest.
+9. **Fund server wallets** (cohort creator, crank, attester).
+10. **Test cohort**: Squads lowers `min_day_seconds` to 600; the cohort creator opens a short cohort with a
+    1 SKR deposit; test wallets run deposit, success, pick, settle, claim, withdraw, close; Squads restores
+    `min_day_seconds` to 86,400 and the value is read back.
+
+**Upgrading later**: `solana program write-buffer` with the deploy key, `solana program set-buffer-authority
+<buffer> --new-buffer-authority <vault>`, then `squads-propose --action upgrade --buffer <buffer> --spill <deploy
+wallet>`, approve, execute. Rehearsed locally.
+
 - Server keypairs are kept outside the repository and in Secret Manager; no keypair or secret is ever
   committed.

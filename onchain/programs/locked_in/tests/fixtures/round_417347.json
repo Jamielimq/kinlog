@@ -9,5 +9,12 @@
   "winning_square": 20,
   "motherlode_hit": false,
   "motherlode_field": "0"
+ },
+ "expected_source": {
+  "kind": "ORE ResetEvent in the reset transaction that created the next round",
+  "reset_tx": "5zm7Cd8Ub9rtoo2wWVwMjog9qP6NWXkxhNHqRwhhvnJWHwAEgACULtfYvd8XVt3D75h1sf42gxdCVdS1oqVmKFXn",
+  "event_rng": "2009515530022591345",
+  "event_motherlode": "0",
+  "log_winning_square": 20
  }
 }

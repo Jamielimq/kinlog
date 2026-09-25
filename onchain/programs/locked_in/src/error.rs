@@ -62,8 +62,10 @@ pub enum LockedInError {
     InvalidRound,
     #[msg("ORE round result is not available yet")]
     RoundNotRevealed,
-    #[msg("Target round is still usable; retarget not allowed")]
+    #[msg("Retarget is only for a finished round without entropy")]
     RetargetNotAllowed,
+    #[msg("Target round finished without entropy; retarget it")]
+    RoundNeedsRetarget,
     #[msg("Not settled yet")]
     NotSettled,
     #[msg("Reward already claimed")]

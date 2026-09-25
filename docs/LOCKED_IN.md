@@ -74,10 +74,13 @@ motherlode round would make every pick in it Legendary.
 
 Amounts are fixed per challenge at creation time and never change afterwards.
 
-- **Common** = the USD value of the 0.001 SOL Fee, converted to ORE and rounded **up** to 5 decimals.
+- **Common** = the USD value of the 0.001 SOL Fee, converted to ORE. It is computed separately from each
+  price source (0.001 × SOL/USD ÷ ORE/USD), the **larger** of the two is taken, and it is rounded **up** to
+  5 decimals, so Common is never worth less than the Fee by either source.
   Example (SOL $113.72, ORE $69.35): 0.001 × 113.72 / 69.35 = 0.0016398 → **0.00164 ORE**.
 - **Rare** = Common × 2. **Legendary** = Common × 20. The program derives both from Common.
-- Prices come from two sources, both queried by mint address: Jupiter Price API and CoinGecko.
+- Prices come from two sources, both queried by mint address with an API key: Jupiter Price API and
+  CoinGecko. A rejected key or a token missing from a response counts as a failed read.
   ORE is always queried as `oreoU2P8bN6jkk3jbaiVxYnG1dCXcYxwhwyK9jSybcp` (several unrelated tokens share
   the name).
 - Safeguards: if the two sources disagree by more than 5% or either fails, the previous challenge's
@@ -150,10 +153,10 @@ closes. Account rent is paid once by the cohort-creator wallet and returns to it
 | `return_deposit` | crank after end; anyone after end + 5 days | destination is always the depositor's SKR associated token account (created by the caller if missing) |
 | `mark_success` | attester | from the start of the last day until end + 5 days; sets the success flag and nothing else |
 | `pick_square` | successful participant | until end + 5 days; the program reads ORE's Board itself and records `round_id + 1` as the target |
-| `settle` | anyone | validates and reads the target Round; settles in pick order; applies caps; logs round, winning square, pick, motherlode flag, tier, amount |
-| `retarget` | anyone | only when the target Round is unusable (no entropy) or already closed; moves the target to the current round + 1; pick order is kept |
+| `settle` | anyone | takes no participant argument: it always settles the next pick in recording order, reading that pick's target Round (validated); applies caps; logs round, winning square, pick, motherlode flag, tier, amount |
+| `retarget` | anyone | only once ORE's board has moved past the target and that round is unusable (finished without entropy, or already closed); moves the target to the current round + 1; pick order is kept. A round that is merely not revealed yet cannot be skipped |
 | `claim_reward` | participant | after settlement, until end + 5 days; ORE goes from the reward vault to the participant's ORE associated token account (created at the participant's expense if missing) |
-| `close_cohort` | anyone, after end + 5 days | requires an empty SKR vault; releases the unused reservation; closes the vault and cohort, rent to `creator` |
+| `close_cohort` | anyone, after end + 5 days | requires every deposit to be returned; burns any SKR dust someone sent into the vault (so a stray transfer cannot block closing); releases the unused reservation; closes the vault and cohort, rent to `creator` |
 
 ### Invariants
 
@@ -287,9 +290,17 @@ visibility.
 
 ## 11. Deployment
 
-- Program rent at current Solana rates (SIMD-0437 is lowering rent in steps through late 2026) is about
-  1.1 SOL for a 300 KB program, plus a temporary buffer of similar size during deployment that is
-  refunded afterwards. Rent amounts shown in the app are queried at runtime, never hard-coded.
+- **Program size:** about 342 KB (release profile `opt-level = "z"`; 399 KB at the default level). Measured
+  compute: deposit ~19k CU, pick ~4k, settle ~7k, claim ~38k including ORE account creation.
+- **Rent** at the current rate (5,080 lamports/byte after SIMD-0437 step 2; further cuts expected late 2026):
+  program data about 1.74 SOL, locked while the program exists; a buffer of the same size is needed during
+  deployment and refunded afterwards, so about 3.5 SOL must be on hand at deploy time. Per cohort: the
+  1,808-byte cohort account plus the SKR vault, about 0.011 SOL, returned to the cohort creator on close.
+  Rent amounts shown in the app are queried at runtime, never hard-coded.
+- **Build format:** SBPFv3 (Anchor 1.2 default). Mainnet enabled v3 deployment at epoch 993, and a pending
+  feature (SIMD-0500) would stop new v0-v2 deployments.
+- **Verifiable build:** to be confirmed with `solana-verify build` (needs Docker) before mainnet; the
+  deploy steps will then be written here around the verifiable artifact.
 - Upgrade authority: a Squads v4 2-of-3 vault.
 - Server keypairs are kept outside the repository and in Secret Manager; no keypair or secret is ever
   committed.

@@ -9,6 +9,9 @@ edition = "2021"
 rust-version = "1.89.0"
 
 [profile.release]
+# Size over speed: 342 KB vs 399 KB at the default level, which is ~0.3 SOL less program rent.
+# Compute stays far below limits (settle ~7k CU, claim ~38k CU).
+opt-level = "z"
 overflow-checks = true
 lto = "fat"
 codegen-units = 1

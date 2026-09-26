@@ -38,6 +38,7 @@ const { positionals, values: o } = parseArgs({
     "user-pubkey": { type: "string" },
     depositor: { type: "string" },
     members: { type: "string" },
+    "rent-collector": { type: "string" },
     threshold: { type: "string", default: "2" },
     multisig: { type: "string" },
     index: { type: "string" },
@@ -208,7 +209,10 @@ async function main() {
       const [programConfigPda] = multisig.getProgramConfigPda({});
       const programConfig = await multisig.accounts.ProgramConfig.fromAccountAddress(conn, programConfigPda);
       console.log(`multisig ${multisigPda.toBase58()}\nvault(0) ${vault.toBase58()}  <- use THIS as admin / upgrade authority`);
+      const rentCollector = o["rent-collector"] ? new PublicKey(o["rent-collector"]) : null;
       console.log(`members ${members.map((m) => m.toBase58()).join(", ")}  threshold ${o.threshold}`);
+      console.log(`config authority: none (changes only via proposals)  time lock: 0  rent collector: ${rentCollector?.toBase58() ?? "none"}`);
+      console.log(`creation fee (program config): ${programConfig.multisigCreationFee.toString()} lamports  fee payer: ${payer.publicKey.toBase58()}`);
       if (dry) break;
       const sig = await multisig.rpc.multisigCreateV2({
         connection: conn,
@@ -220,7 +224,7 @@ async function main() {
         threshold: Number(o.threshold),
         members: members.map((key) => ({ key, permissions: multisig.types.Permissions.all() })),
         timeLock: 0,
-        rentCollector: null,
+        rentCollector,
       });
       await conn.confirmTransaction(sig, "confirmed");
       console.log(`created: ${sig}`);
@@ -333,6 +337,9 @@ async function main() {
         threshold: ms.threshold,
         members: ms.members.map((m) => m.key.toBase58()),
         transactionIndex: ms.transactionIndex.toString(),
+        rentCollector: ms.rentCollector?.toBase58() ?? null,
+        configAuthority: ms.configAuthority.toBase58(),
+        timeLock: ms.timeLock,
       });
       break;
     }
@@ -359,8 +366,47 @@ async function main() {
       break;
     }
 
+    case "balances": {
+      // Read-only. Addresses come from docs/private/wallets.json (never keypairs).
+      const fs = await import("node:fs");
+      const file = new URL("../../docs/private/wallets.json", import.meta.url);
+      const list = JSON.parse(fs.readFileSync(file, "utf8"));
+      // One getMultipleAccountsInfo call: each wallet plus its ORE and SKR associated token accounts
+      // (balances outside the ATA are not counted), plus the listed token accounts.
+      const addrs: PublicKey[] = [];
+      for (const w of list.wallets) {
+        const a = new PublicKey(w.address);
+        addrs.push(a, getAssociatedTokenAddressSync(L.ORE_MINT, a, true), getAssociatedTokenAddressSync(L.SKR_MINT, a, true));
+      }
+      for (const t of list.token_accounts) addrs.push(new PublicKey(t.address));
+      const infos = await conn.getMultipleAccountsInfo(addrs);
+      const amt = (i: number, dec: number) => (infos[i] && infos[i]!.data.length === 165 ? Number(infos[i]!.data.readBigUInt64LE(64)) / 10 ** dec : 0);
+      const rows: Record<string, string | number>[] = [];
+      list.wallets.forEach((w: { name: string; address: string }, k: number) => {
+        rows.push({
+          name: w.name,
+          address: `${w.address.slice(0, 4)}…${w.address.slice(-4)}`,
+          SOL: ((infos[3 * k]?.lamports ?? 0) / LAMPORTS_PER_SOL).toFixed(6),
+          ORE: amt(3 * k + 1, L.ORE_DECIMALS),
+          SKR: amt(3 * k + 2, L.SKR_DECIMALS),
+        });
+      });
+      list.token_accounts.forEach((t: { name: string; address: string }, k: number) => {
+        const i = 3 * list.wallets.length + k;
+        rows.push({ name: t.name, address: `${t.address.slice(0, 4)}…${t.address.slice(-4)}`, SOL: ((infos[i]?.lamports ?? 0) / LAMPORTS_PER_SOL).toFixed(6), ORE: amt(i, L.ORE_DECIMALS), SKR: 0 });
+      });
+      console.table(rows);
+      const cfg = await conn.getAccountInfo(L.configPda());
+      if (cfg) {
+        const reserved = cfg.data.readBigUInt64LE(8 + 32 * 5 + 24);
+        const vault = rows.find((r) => r.name === "Reward-Vault");
+        console.log(`reward vault reserved_total ${Number(reserved) / 1e11} ORE; unreserved ${(Number(vault?.ORE ?? 0) - Number(reserved) / 1e11).toFixed(11)} ORE`);
+      }
+      break;
+    }
+
     default:
-      console.log("commands: init-config fund-reward-vault transfer-sol create-cohort deposit withdraw return-deposit mark-success pick settle claim close-cohort show config squads-create squads-propose squads-approve squads-execute squads-show");
+      console.log("commands: balances init-config fund-reward-vault transfer-sol create-cohort deposit withdraw return-deposit mark-success pick settle claim close-cohort show config squads-create squads-propose squads-approve squads-execute squads-show");
   }
 }
 

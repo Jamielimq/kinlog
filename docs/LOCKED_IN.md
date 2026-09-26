@@ -318,6 +318,14 @@ visibility.
 | Each cohort (account + SKR vault) | 0.011 | returned to the cohort creator on close |
 | A later upgrade | ~1.81 on hand | buffer rent, refunded to the spill address after the upgrade |
 
+### Mainnet deployment (2026-09-26)
+
+| Item | Value |
+|---|---|
+| Program | `9vG8Qcwvv5uWbHJsvxT6G2HHCD7punB1tYhRLJW5wcby` |
+| Verified build | OtterSec: verified, commit `4aed89d`, executable hash `e8f129bd…d457` ([status](https://verify.osec.io/status/9vG8Qcwvv5uWbHJsvxT6G2HHCD7punB1tYhRLJW5wcby)) |
+| Upgrade authority and admin | Squads v4 vault `FG32T61dtu8xZscxSSH9hh6UchJgCNBjhmU81dchPZ31`: 2-of-3, two of the three signers are Seeker phones using Seed Vault |
+
 ### Mainnet runbook
 
 Every step that touches mainnet is run only after the owner approves that exact command. Scripts live in

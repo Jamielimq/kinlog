@@ -36,6 +36,7 @@ const { positionals, values: o } = parseArgs({
     "attester-pubkey": { type: "string" },
     "crank-pubkey": { type: "string" },
     "user-pubkey": { type: "string" },
+    "ore-to": { type: "string" },
     depositor: { type: "string" },
     members: { type: "string" },
     "rent-collector": { type: "string" },
@@ -363,6 +364,50 @@ async function main() {
         minDaySeconds: minDay, maxCapacity: d[off], maxLiveCohorts: [d[off + 1], d[off + 2]],
         liveCohorts: [d[off + 3], d[off + 4]], depositsPaused: d[off + 5] === 1,
       });
+      break;
+    }
+
+    case "sweep-test-wallet": {
+      // Empties a test wallet in one transaction: ORE -> --ore-to token account (optional), SKR ->
+      // the recipient's SKR ATA, closes the emptied token accounts (rent to recipient), then sends
+      // all remaining SOL to the recipient. The wallet ends with 0 lamports.
+      const user = L.loadKeypair(o.user, "user");
+      const to = L.pk(o["user-pubkey"], "user-pubkey (recipient)");
+      const { createCloseAccountInstruction } = await import("@solana/spl-token");
+      const { SystemProgram } = await import("@solana/web3.js");
+      const ixs = [];
+      const read = async (a: PublicKey) => {
+        const i = await conn.getAccountInfo(a);
+        return i && i.data.length === 165 ? i.data.readBigUInt64LE(64) : null;
+      };
+      const oreAta = getAssociatedTokenAddressSync(L.ORE_MINT, user.publicKey);
+      const skrAta = getAssociatedTokenAddressSync(L.SKR_MINT, user.publicKey);
+      const oreBal = await read(oreAta);
+      const skrBal = await read(skrAta);
+      if (oreBal !== null) {
+        if (oreBal > 0n) {
+          const dst = L.pk(o["ore-to"], "ore-to (token account for the ORE)");
+          console.log(`ORE ${Number(oreBal) / 1e11} from ${oreAta.toBase58()} -> ${dst.toBase58()}`);
+          ixs.push(createTransferCheckedInstruction(oreAta, L.ORE_MINT, dst, user.publicKey, oreBal, L.ORE_DECIMALS));
+        }
+        console.log(`close ORE account ${oreAta.toBase58()} (rent -> ${to.toBase58()})`);
+        ixs.push(createCloseAccountInstruction(oreAta, to, user.publicKey));
+      }
+      if (skrBal !== null) {
+        if (skrBal > 0n) {
+          const dst = getAssociatedTokenAddressSync(L.SKR_MINT, to);
+          if ((await read(dst)) === null) throw new Error(`recipient SKR ATA ${dst.toBase58()} does not exist`);
+          console.log(`SKR ${Number(skrBal) / 1e6} from ${skrAta.toBase58()} -> ${dst.toBase58()} (recipient ATA)`);
+          ixs.push(createTransferCheckedInstruction(skrAta, L.SKR_MINT, dst, user.publicKey, skrBal, L.SKR_DECIMALS));
+        }
+        console.log(`close SKR account ${skrAta.toBase58()} (rent -> ${to.toBase58()})`);
+        ixs.push(createCloseAccountInstruction(skrAta, to, user.publicKey));
+      }
+      const lamports = await conn.getBalance(user.publicKey);
+      const fee = 5000;
+      console.log(`SOL ${(lamports - fee) / LAMPORTS_PER_SOL} (balance ${lamports / LAMPORTS_PER_SOL} minus fee ${fee / LAMPORTS_PER_SOL}) -> ${to.toBase58()}`);
+      ixs.push(SystemProgram.transfer({ fromPubkey: user.publicKey, toPubkey: to, lamports: lamports - fee }));
+      await L.send(conn, "sweep test wallet", ixs, [user], dry);
       break;
     }
 

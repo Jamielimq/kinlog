@@ -142,8 +142,7 @@ async function main() {
 
     case "deposit": {
       const user = L.loadKeypair(o.user, "user");
-      const cfg = await conn.getAccountInfo(L.configPda());
-      const feeWallet = new PublicKey(cfg!.data.subarray(8 + 32 * 4, 8 + 32 * 5));
+      const { feeWallet } = L.decodeConfig((await conn.getAccountInfo(L.configPda()))!.data);
       await L.send(conn, "deposit", [L.ixDeposit(user.publicKey, kind, id(), feeWallet)], [user], dry);
       break;
     }
@@ -171,10 +170,24 @@ async function main() {
     case "settle": {
       const payer = L.loadKeypair(o.payer ?? o.crank, "payer|crank");
       const c = L.decodeCohort((await conn.getAccountInfo(L.cohortPda(kind, id())))!.data);
-      const next = c.slots.find((s) => (s.flags & 8) && !(s.flags & 16) && s.pickSeq === c.nextSettle);
+      const next = L.nextPendingPick(c);
       if (!next) fail("a pending pick");
       console.log(`next pick seq ${c.nextSettle} targets ORE round ${next.targetRound}`);
       await L.send(conn, "settle", [L.ixSettle(kind, id(), next.targetRound)], [payer], dry);
+      break;
+    }
+    case "retarget": {
+      // Only for the next pending pick whose round finished without entropy (the program re-checks).
+      const payer = L.loadKeypair(o.payer ?? o.crank, "payer|crank");
+      const c = L.decodeCohort((await conn.getAccountInfo(L.cohortPda(kind, id())))!.data);
+      const next = L.nextPendingPick(c);
+      if (!next) fail("a pending pick");
+      const board = L.decodeBoardRoundId(await conn.getAccountInfo(L.ORE_BOARD));
+      const round = L.readRound(await conn.getAccountInfo(L.roundPda(next.targetRound)), next.targetRound);
+      const action = L.settleAction(board, next.targetRound, round);
+      console.log(`next pick seq ${c.nextSettle} targets ORE round ${next.targetRound}; board at ${board}; action ${action}`);
+      if (action !== "retarget") throw new Error(`retarget is only for a finished round without entropy (action: ${action})`);
+      await L.send(conn, "retarget", [L.ixRetarget(kind, id(), next.user, next.targetRound)], [payer], dry);
       break;
     }
     case "claim": {
@@ -351,18 +364,14 @@ async function main() {
         console.log("config not initialised");
         break;
       }
-      const d = a.data;
-      const key = (i: number) => new PublicKey(d.subarray(8 + 32 * i, 8 + 32 * (i + 1))).toBase58();
-      let off = 8 + 32 * 5;
-      const u64 = () => d.readBigUInt64LE((off += 8) - 8).toString();
-      const fee = u64(), depMax = u64(), maxReward = u64(), reserved = u64();
-      const minDay = d.readUInt32LE(off);
-      off += 4;
+      const c = L.decodeConfig(a.data);
       console.log({
-        admin: key(0), cohortCreator: key(1), attester: key(2), crank: key(3), feeWallet: key(4),
-        feeLamports: fee, depositAmountMax: depMax, maxRewardPerBox: maxReward, reservedTotal: reserved,
-        minDaySeconds: minDay, maxCapacity: d[off], maxLiveCohorts: [d[off + 1], d[off + 2]],
-        liveCohorts: [d[off + 3], d[off + 4]], depositsPaused: d[off + 5] === 1,
+        admin: c.admin.toBase58(), cohortCreator: c.cohortCreator.toBase58(), attester: c.attester.toBase58(),
+        crank: c.crank.toBase58(), feeWallet: c.feeWallet.toBase58(),
+        feeLamports: c.feeLamports.toString(), depositAmountMax: c.depositAmountMax.toString(),
+        maxRewardPerBox: c.maxRewardPerBox.toString(), reservedTotal: c.reservedTotal.toString(),
+        minDaySeconds: c.minDaySeconds, maxCapacity: c.maxCapacity, maxLiveCohorts: c.maxLiveCohorts,
+        liveCohorts: c.liveCohorts, depositsPaused: c.depositsPaused,
       });
       break;
     }
@@ -376,10 +385,7 @@ async function main() {
       const { createCloseAccountInstruction } = await import("@solana/spl-token");
       const { SystemProgram } = await import("@solana/web3.js");
       const ixs = [];
-      const read = async (a: PublicKey) => {
-        const i = await conn.getAccountInfo(a);
-        return i && i.data.length === 165 ? i.data.readBigUInt64LE(64) : null;
-      };
+      const read = async (a: PublicKey) => L.tokenAmount(await conn.getAccountInfo(a));
       const oreAta = getAssociatedTokenAddressSync(L.ORE_MINT, user.publicKey);
       const skrAta = getAssociatedTokenAddressSync(L.SKR_MINT, user.publicKey);
       const oreBal = await read(oreAta);
@@ -425,7 +431,7 @@ async function main() {
       }
       for (const t of list.token_accounts) addrs.push(new PublicKey(t.address));
       const infos = await conn.getMultipleAccountsInfo(addrs);
-      const amt = (i: number, dec: number) => (infos[i] && infos[i]!.data.length === 165 ? Number(infos[i]!.data.readBigUInt64LE(64)) / 10 ** dec : 0);
+      const amt = (i: number, dec: number) => Number(L.tokenAmount(infos[i]) ?? 0n) / 10 ** dec;
       const rows: Record<string, string | number>[] = [];
       list.wallets.forEach((w: { name: string; address: string }, k: number) => {
         rows.push({
@@ -443,7 +449,7 @@ async function main() {
       console.table(rows);
       const cfg = await conn.getAccountInfo(L.configPda());
       if (cfg) {
-        const reserved = cfg.data.readBigUInt64LE(8 + 32 * 5 + 24);
+        const reserved = L.decodeConfig(cfg.data).reservedTotal;
         const vault = rows.find((r) => r.name === "Reward-Vault");
         console.log(`reward vault reserved_total ${Number(reserved) / 1e11} ORE; unreserved ${(Number(vault?.ORE ?? 0) - Number(reserved) / 1e11).toFixed(11)} ORE`);
       }
@@ -451,7 +457,7 @@ async function main() {
     }
 
     default:
-      console.log("commands: balances init-config fund-reward-vault transfer-sol create-cohort deposit withdraw return-deposit mark-success pick settle claim close-cohort show config squads-create squads-propose squads-approve squads-execute squads-show");
+      console.log("commands: balances init-config fund-reward-vault transfer-sol create-cohort deposit withdraw return-deposit mark-success pick settle retarget claim close-cohort show config sweep-test-wallet squads-create squads-propose squads-approve squads-execute squads-show");
   }
 }
 

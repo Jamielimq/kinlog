@@ -368,10 +368,170 @@ export function decodeCohort(d: Buffer): Cohort {
   return c as Cohort;
 }
 
+// Anchor account discriminator: sha256("account:<Name>")[..8].
+const accountDisc = (name: string) => crypto.createHash("sha256").update(`account:${name}`).digest().subarray(0, 8);
+export const COHORT_DISCRIMINATOR = accountDisc("Cohort");
+export const CONFIG_DISCRIMINATOR = accountDisc("Config");
+export const COHORT_ACCOUNT_LEN = 1808;
+export const isCohortAccount = (d: Buffer) => d.length === COHORT_ACCOUNT_LEN && d.subarray(0, 8).equals(COHORT_DISCRIMINATOR);
+
+export interface ConfigState {
+  admin: PublicKey;
+  cohortCreator: PublicKey;
+  attester: PublicKey;
+  crank: PublicKey;
+  feeWallet: PublicKey;
+  feeLamports: bigint;
+  depositAmountMax: bigint;
+  maxRewardPerBox: bigint;
+  reservedTotal: bigint;
+  minDaySeconds: number;
+  maxCapacity: number;
+  maxLiveCohorts: [number, number];
+  liveCohorts: [number, number];
+  depositsPaused: boolean;
+}
+/** Config (Borsh): five keys, four u64, min_day_seconds u32, then single bytes. */
+export function decodeConfig(d: Buffer): ConfigState {
+  const key = (i: number) => new PublicKey(d.subarray(8 + 32 * i, 8 + 32 * (i + 1)));
+  let off = 8 + 32 * 5;
+  const u64 = () => d.readBigUInt64LE((off += 8) - 8);
+  const feeLamports = u64(), depositAmountMax = u64(), maxRewardPerBox = u64(), reservedTotal = u64();
+  const minDaySeconds = d.readUInt32LE(off);
+  off += 4;
+  return {
+    admin: key(0), cohortCreator: key(1), attester: key(2), crank: key(3), feeWallet: key(4),
+    feeLamports, depositAmountMax, maxRewardPerBox, reservedTotal, minDaySeconds,
+    maxCapacity: d[off], maxLiveCohorts: [d[off + 1], d[off + 2]], liveCohorts: [d[off + 3], d[off + 4]],
+    depositsPaused: d[off + 5] === 1,
+  };
+}
+
+/** Amount of a classic SPL token account (165 bytes), or null when the account is missing or not one. */
+export const tokenAmount = (info: { data: Buffer } | null | undefined): bigint | null =>
+  info && info.data.length === 165 ? info.data.readBigUInt64LE(64) : null;
+
+// ---- program rules mirrored for off-chain callers (programs/locked_in/src/constants.rs, state.rs) ---
+
+export const FLAG = { OCCUPIED: 1, SUCCESS: 2, RETURNED: 4, PICKED: 8, SETTLED: 16, CLAIMED: 32 } as const;
+export const TIER = { NONE: 0, COMMON: 1, RARE: 2, LEGENDARY: 3 } as const;
+export const KIND_3_DAY = 0;
+export const KIND_7_DAY = 1;
+export const DAYS_FOR_KIND: readonly number[] = [3, 7];
+export const SECONDS_PER_DAY = 86_400;
+/** Real (86,400 s) cohorts start at 00:00 KST = 15:00 UTC. */
+export const REAL_COHORT_START_OFFSET = 15 * 3_600;
+export const MAX_END_AHEAD = 30 * 86_400;
+export const CLAIM_WINDOW_DAYS = 5;
+export const MAX_SLOTS = 30;
+/** Reward amounts are whole multiples of 0.00001 ORE. */
+export const ORE_REWARD_GRANULARITY = 1_000_000n;
+export const LEGENDARY_CAP = 1;
+export const RARE_CAP = 3;
+export const LEGENDARY_MULTIPLIER = 20n;
+export const RARE_MULTIPLIER = 2n;
+
+export const hasFlag = (s: Slot, f: number) => (s.flags & f) !== 0;
+export const lastDayStart = (c: Cohort) => c.startTs + BigInt(c.days - 1) * BigInt(c.daySeconds);
+export const joiningCloses = (c: Cohort) => c.startTs + BigInt(c.daySeconds);
+
+/** Worst case a cohort can pay (state.rs worst_case_reward): every seat succeeds and the caps fill. */
+export function worstCaseReward(common: bigint, capacity: number): bigint {
+  const legendary = Math.min(LEGENDARY_CAP, capacity);
+  const rare = Math.min(RARE_CAP, capacity - legendary);
+  const rest = capacity - legendary - rare;
+  return common * (LEGENDARY_MULTIPLIER * BigInt(legendary) + RARE_MULTIPLIER * BigInt(rare) + BigInt(rest));
+}
+
+/** The pick `settle` will take next: picked, unsettled, and first in recording order. */
+export const nextPendingPick = (c: Cohort): Slot | undefined =>
+  c.slots.find((s) => hasFlag(s, FLAG.PICKED) && !hasFlag(s, FLAG.SETTLED) && s.pickSeq === c.nextSettle);
+
+/** LockedInError variants in declaration order; Anchor numbers them from 6000. */
+export const ERROR_NAMES = [
+  "Unauthorized", "InvalidLimit", "InvalidKind", "InvalidDayLength", "MisalignedStart", "StartInPast",
+  "EndTooFar", "InvalidDepositAmount", "InvalidRewardAmount", "RewardAboveMax", "TooManyLiveCohorts",
+  "InsufficientRewardVault", "DepositsPaused", "JoiningClosed", "CohortFull", "AlreadyJoined", "NotParticipant",
+  "CohortNotEnded", "AlreadyReturned", "SuccessWindowClosed", "NotSuccessful", "AlreadyPicked", "InvalidSquare",
+  "DeadlinePassed", "NotPicked", "AlreadySettled", "OutOfOrder", "InvalidBoard", "InvalidRound",
+  "RoundNotRevealed", "RetargetNotAllowed", "RoundNeedsRetarget", "NotSettled", "AlreadyClaimed",
+  "DeadlineNotPassed", "DepositsOutstanding", "Overflow",
+] as const;
+export type ProgramErrorName = (typeof ERROR_NAMES)[number];
+export const errorName = (code: number): ProgramErrorName | undefined => ERROR_NAMES[code - 6000];
+
+// ---- ORE accounts (programs/locked_in/src/ore.rs; ore-api 3.8.x layouts) ------------------------
+
+export const ORE_BOARD_DISCRIMINATOR = 105;
+export const ORE_BOARD_LEN = 40;
+export const ORE_ROUND_DISCRIMINATOR = 109;
+export const ORE_ROUND_LEN = 952;
+export const ORE_ROUND_ID_OFFSET = 8;
+export const ORE_ROUND_SLOT_HASH_OFFSET = 616;
+
+interface RawAccount {
+  owner: PublicKey;
+  data: Buffer;
+}
+// steel discriminator: first byte is the account type, the next 7 are zero.
+const hasSteelDisc = (d: Buffer, disc: number) => d.length >= 8 && d[0] === disc && d.subarray(1, 8).every((b) => b === 0);
+
+/** Current round id from ORE's Board, validated the way the program does (owner, size, discriminator). */
+export function decodeBoardRoundId(info: RawAccount | null | undefined): bigint {
+  if (!info) throw new Error("ORE board not found");
+  if (!info.owner.equals(ORE_PROGRAM_ID) || info.data.length !== ORE_BOARD_LEN || !hasSteelDisc(info.data, ORE_BOARD_DISCRIMINATOR)) {
+    throw new Error("account is not the ORE board");
+  }
+  return info.data.readBigUInt64LE(8);
+}
+
 export async function boardRoundId(conn: Connection): Promise<bigint> {
-  const a = await conn.getAccountInfo(ORE_BOARD);
-  if (!a) throw new Error("ORE board not found");
-  return a.data.readBigUInt64LE(8);
+  return decodeBoardRoundId(await conn.getAccountInfo(ORE_BOARD));
+}
+
+/** `missing`: closed, not created yet, or not owned by ORE. `present`: rng is null until entropy is written. */
+export type RoundState = { kind: "missing" } | { kind: "present"; rng: bigint | null };
+
+/** Reads the account fetched from roundPda(roundId), as `ore::read_round` does. Throws where the program would. */
+export function readRound(info: RawAccount | null | undefined, roundId: bigint): RoundState {
+  if (!info || !info.owner.equals(ORE_PROGRAM_ID) || info.data.length === 0) return { kind: "missing" };
+  const d = info.data;
+  if (d.length !== ORE_ROUND_LEN || !hasSteelDisc(d, ORE_ROUND_DISCRIMINATOR) || d.readBigUInt64LE(ORE_ROUND_ID_OFFSET) !== roundId) {
+    throw new Error(`account is not ORE round ${roundId}`);
+  }
+  return { kind: "present", rng: oreRng(d.subarray(ORE_ROUND_SLOT_HASH_OFFSET, ORE_ROUND_SLOT_HASH_OFFSET + 32)) };
+}
+
+/** `Round::rng()`: XOR of the four little-endian u64 words; null if all 0x00 or all 0xFF. */
+export function oreRng(slotHash: Buffer): bigint | null {
+  if (slotHash.every((b) => b === 0) || slotHash.every((b) => b === 0xff)) return null;
+  let r = 0n;
+  for (let i = 0; i < 4; i++) r ^= slotHash.readBigUInt64LE(i * 8);
+  return r;
+}
+
+function reverseBits64(x: bigint): bigint {
+  let r = 0n;
+  for (let i = 0; i < 64; i++) {
+    r = (r << 1n) | (x & 1n);
+    x >>= 1n;
+  }
+  return r;
+}
+export const winningSquare = (rng: bigint) => Number(rng % 25n);
+export const hitMotherlode = (rng: bigint) => reverseBits64(rng) % 500n === 0n;
+
+/**
+ * What `settle` / `retarget` would do for a pick targeting `target` (reward.rs handle_settle):
+ * a revealed round settles; a closed round settles as Common once ORE's board has moved past it;
+ * a finished round without entropy needs `retarget`; anything else waits.
+ */
+export type SettleAction = "settle" | "retarget" | "wait";
+export function settleAction(boardRound: bigint, target: bigint, round: RoundState): SettleAction {
+  const finished = boardRound > target;
+  if (round.kind === "present" && round.rng !== null) return "settle";
+  if (round.kind === "missing") return finished ? "settle" : "wait";
+  return finished ? "retarget" : "wait";
 }
 
 // ---- sending --------------------------------------------------------------------------------------

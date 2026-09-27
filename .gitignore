@@ -69,5 +69,14 @@ id.json
 functions/.env*
 functions/.secret.local
 
+# Cloud Functions build output and emulator logs
+functions/lib/
+functions/.tmp/
+functions/.test-build/
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+
 # Private notes (revenue model, simulations). Never committed.
 docs/private/

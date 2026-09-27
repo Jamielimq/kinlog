@@ -1,10 +1,14 @@
 rules_version = '2';
 
-// X2 protection model:
-// - challenges/* is read-only (admin-seeded, no client writes)
-// - users/{wallet}/userChallenges/* is strictly validated (schema, state machine, bonus integrity)
-// - Other user subcollections are loosely permitted (wallet format check only)
-// - Self-only-read and points-write blocking are deferred to Phase 2 (requires Firebase Custom Token Auth)
+// Access model (Locked In, transition period):
+// - A wallet that has signed in with the new app (authLinks/{wallet} exists) is owner-only: reading
+//   or writing its data needs that wallet's own Firebase token (uid = wallet address).
+// - A wallet that has never signed in keeps the signed-out access the live v1.3.3 app relies on.
+// - Locked In data (cohorts, daily totals, progress, badge grants, completion points) is written by
+//   Cloud Functions only.
+// - A signed-in workout carries `uid`: only the owner's token can create one, and nobody can change
+//   or delete it afterwards. Locked In counts only these.
+// - challenges/* is read-only; users/{wallet}/userChallenges/* keeps its schema and state checks.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -13,6 +17,38 @@ service cloud.firestore {
 
     function isValidWallet(addr) {
       return addr is string && addr.matches('^[1-9A-HJ-NP-Za-km-z]{32,44}$');
+    }
+
+    function isOwner(wallet) {
+      return request.auth != null && request.auth.uid == wallet;
+    }
+
+    function linked(wallet) {
+      return exists(/databases/$(database)/documents/authLinks/$(wallet));
+    }
+
+    // The owner's token always; no token only while the wallet has never signed in.
+    function legacyAccess(wallet) {
+      return isValidWallet(wallet)
+        && (isOwner(wallet) || (request.auth == null && !linked(wallet)));
+    }
+
+    function isTester() {
+      return request.auth != null
+        && request.auth.uid in get(/databases/$(database)/documents/config/testers).data.wallets;
+    }
+
+    // Signed-in workout: the owner's token, plausible numbers, created now.
+    function validSignedInWorkout(wallet) {
+      let d = request.resource.data;
+      return isOwner(wallet)
+        && d.uid == wallet
+        && d.rawReps is int && d.rawReps >= 0 && d.rawReps <= 300
+        && (!('reps' in d) || (d.reps is int && d.reps >= 0 && d.reps <= d.rawReps))
+        && d.elapsed is int && d.elapsed >= d.rawReps && d.elapsed <= 21600
+        && d.createdAt is int
+        && d.createdAt > request.time.toMillis() - 600000
+        && d.createdAt < request.time.toMillis() + 600000;
     }
 
     function unchanged(field) {
@@ -37,29 +73,63 @@ service cloud.firestore {
           && request.resource.data.claimTxSignature is string;
     }
 
-    // ===== Global challenge catalog (read-only) =====
+    // ===== Global, read-only =====
 
     match /challenges/{challengeId} {
       allow read: if true;
       allow write: if false;
     }
 
+    // Test cohorts (shorter days) are visible to configured testers only.
+    match /cohorts/{cohortId} {
+      allow read: if resource.data.isTest == false || isTester();
+      allow write: if false;
+    }
+
+    match /config/testers {
+      allow read: if true;
+    }
+
     // ===== User documents =====
 
     match /users/{wallet} {
-      allow read, write: if isValidWallet(wallet);
+      allow read, write: if legacyAccess(wallet);
 
-      match /badges/{badgeId}        { allow read, write: if isValidWallet(wallet); }
-      match /goals/{goalId}          { allow read, write: if isValidWallet(wallet); }
-      match /workouts/{workoutId}    { allow read, write: if isValidWallet(wallet); }
-      match /points_history/{histId} { allow read, write: if isValidWallet(wallet); }
-      match /cache/{cacheId}         { allow read, write: if isValidWallet(wallet); }
+      match /badges/{badgeId} {
+        allow read, write: if legacyAccess(wallet);
+
+        match /grants/{grantId} {
+          allow read: if isOwner(wallet);
+          allow write: if false;
+        }
+      }
+      match /goals/{goalId}   { allow read, write: if legacyAccess(wallet); }
+      match /cache/{cacheId}  { allow read, write: if legacyAccess(wallet); }
+
+      // li-* entries are Locked In completion points, written by the server only.
+      match /points_history/{histId} {
+        allow read: if legacyAccess(wallet);
+        allow write: if legacyAccess(wallet) && !histId.matches('^li-.*');
+      }
+
+      match /workouts/{workoutId} {
+        allow read: if legacyAccess(wallet);
+        allow create: if legacyAccess(wallet)
+          && (!('uid' in request.resource.data) || validSignedInWorkout(wallet));
+        allow update: if legacyAccess(wallet)
+          && !('uid' in resource.data) && !('uid' in request.resource.data);
+        allow delete: if legacyAccess(wallet) && !('uid' in resource.data);
+      }
+
+      // Locked In, server-written.
+      match /daily/{dayId}       { allow read: if isOwner(wallet); allow write: if false; }
+      match /lockedIn/{cohortId} { allow read: if isOwner(wallet); allow write: if false; }
 
       // Strictly protected: challenge instances
       match /userChallenges/{instanceId} {
-        allow read: if isValidWallet(wallet);
+        allow read: if legacyAccess(wallet);
 
-        allow create: if isValidWallet(wallet)
+        allow create: if legacyAccess(wallet)
           && request.resource.data.keys().hasAll([
                'challengeId', 'status', 'sequence', 'startedAt',
                'startTxSignature', 'startMemo', 'requirementSnapshot', 'progress'
@@ -76,7 +146,7 @@ service cloud.firestore {
           && request.resource.data.requirementSnapshot is map
           && request.resource.data.progress is map;
 
-        allow update: if isValidWallet(wallet)
+        allow update: if legacyAccess(wallet)
           && unchanged('challengeId')
           && unchanged('sequence')
           && unchanged('startedAt')
@@ -94,6 +164,11 @@ service cloud.firestore {
     }
 
     // ===== Explicitly closed paths =====
+
+    // Server-only: sign-in records, spent nonces, job state, other config.
+    match /authLinks/{wallet}   { allow read, write: if false; }
+    match /authNonces/{nonce}   { allow read, write: if false; }
+    match /ops/{docId}          { allow read, write: if false; }
 
     // useLeaderboard.ts is dead code; deny access until it's removed or wired up.
     match /leaderboard/{document=**} {

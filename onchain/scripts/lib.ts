@@ -33,7 +33,7 @@ export const ORE_DECIMALS = 11;
 // ---- network --------------------------------------------------------------------------------------
 
 export type Cluster = "local" | "devnet" | "mainnet";
-const GENESIS: Record<Exclude<Cluster, "local">, string> = {
+export const GENESIS: Record<Exclude<Cluster, "local">, string> = {
   mainnet: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
   devnet: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
 };

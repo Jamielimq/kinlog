@@ -35,6 +35,7 @@ export type AlertKind =
   | "pick_stuck"
   | "success_rate_high"
   | "job_error"
+  | "rpc_misconfigured"
   | "test";
 
 const ALERT_EVERY_MS = 60 * 60_000;

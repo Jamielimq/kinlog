@@ -10,7 +10,8 @@ import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { completeSignIn, checkSignIn, signInPayload } from "./auth/handlers.ts";
 import { keypairFromSecret } from "./chain/keys.ts";
-import { SolanaChain, type ServerKeys } from "./chain/solana.ts";
+import { GENESIS } from "./chain/program.ts";
+import { type RpcEvent, SolanaChain, type ServerKeys } from "./chain/solana.ts";
 import { runEveryMinute } from "./crank/everyMinute.ts";
 import { runDaily } from "./daily/daily.ts";
 import { readCoinGecko, readJupiter } from "./daily/price.ts";
@@ -30,6 +31,33 @@ const SECRET_FOR: Record<Role, { value(): string }> = {
 };
 const SECRET_NAME: Record<Role, string> = { cohortCreator: "COHORT_CREATOR_KEY", attester: "ATTESTER_KEY", crank: "CRANK_KEY" };
 
+/** Primary RPC checks and fallbacks become one log line per instance, a rate-limited warning, or an alert. */
+const FALLBACK_LOG_EVERY_MS = 10 * 60_000;
+let fallbackLoggedAt = 0;
+let fallbacksSinceLog = 0;
+async function onRpcEvent(e: RpcEvent) {
+  switch (e.kind) {
+    case "verified":
+      log.info("rpc_verified", { genesis: e.genesis.slice(0, 6) });
+      return;
+    case "fallback": {
+      fallbacksSinceLog++;
+      const now = Date.now();
+      if (now - fallbackLoggedAt < FALLBACK_LOG_EVERY_MS) return;
+      log.warn("primary RPC read failed; used the public RPC", { error: errText(e.error), fallbacks: fallbacksSinceLog });
+      fallbackLoggedAt = now;
+      fallbacksSinceLog = 0;
+      return;
+    }
+    case "genesis_mismatch":
+      await alert(db, "rpc_misconfigured", "genesis", { detail: "SERVER_RPC_URL is not mainnet; transactions are refused", genesis: e.genesis.slice(0, 6) });
+      return;
+    case "genesis_unreachable":
+      await alert(db, "rpc_misconfigured", "unreachable", { detail: "could not verify SERVER_RPC_URL", error: errText(e.error) });
+      return;
+  }
+}
+
 /** One chain per instance and role set. Only the keys a function is bound to are ever read. */
 const chains = new Map<string, SolanaChain>();
 function chainFor(roles: Role[]): SolanaChain {
@@ -41,7 +69,9 @@ function chainFor(roles: Role[]): SolanaChain {
     const local = /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(url);
     const keys: ServerKeys = {};
     for (const r of roles) keys[r] = keypairFromSecret(SECRET_FOR[r].value(), SECRET_NAME[r]);
-    chain = new SolanaChain(new Connection(url, "confirmed"), local || url === PUBLIC_RPC ? null : new Connection(PUBLIC_RPC, "confirmed"), keys);
+    const fallback = local || url === PUBLIC_RPC ? null : new Connection(PUBLIC_RPC, "confirmed");
+    // A local validator (emulator runs) has its own genesis, so only non-local URLs are checked.
+    chain = new SolanaChain(new Connection(url, "confirmed"), fallback, keys, { expectedGenesis: local ? undefined : GENESIS.mainnet, onRpcEvent });
     chains.set(id, chain);
   }
   return chain;

@@ -14,10 +14,10 @@ Companion documents: `CLAUDE.md` (working rules, settled product decisions), `do
 | [1. Rules](#1-rules) | What a participant sees and agrees to |
 | [2. Rewards](#2-rewards) | Tiers, odds, per-challenge caps, amount rule |
 | [3. Cohorts](#3-cohorts) | Schedule, day boundary, joining window, deadlines |
-| [4. On-chain program](#4-on-chain-program-planned) | Accounts, instructions, invariants |
+| [4. On-chain program](#4-on-chain-program) | Accounts, instructions, invariants |
 | [5. Reading ORE rounds](#5-reading-ore-rounds) | Board/Round layout, target round, settlement |
 | [6. Keys and blast radius](#6-keys-and-blast-radius) | Roles, what each key can and cannot do |
-| [7. Server](#7-server-planned) | Cloud Functions, Firestore collections, alerts |
+| [7. Server](#7-server) | Cloud Functions, Firestore collections, alerts |
 | [8. App](#8-app-planned) | Screens, copy rules, badges |
 | [9. ORE staking](#9-ore-staking-optional) | Optional receive-as-stake path |
 | [10. Testing](#10-testing) | Local mainnet-fork strategy and scenarios |
@@ -123,7 +123,7 @@ A cohort is one run of the challenge with its own on-chain account.
   created while the Squads-controlled `min_day_seconds` is lowered, may start at any time, and is shown in
   the app only to a configured list of tester wallets.
 
-## 4. On-chain program (planned)
+## 4. On-chain program
 
 An Anchor program. PDAs are addresses owned by the program with no private key, so only the program's
 own rules can move what they hold.
@@ -219,24 +219,33 @@ Worst cases:
 - **Squat counts** are reported by the app. Sign-in, server timestamps and plausibility checks limit
   tampering; what remains is bounded by the limits above.
 
-## 7. Server (planned)
+## 7. Server
 
-Firebase (Blaze plan) with Cloud Functions.
+Cloud Functions v2 in `functions/` (TypeScript, Node 22) on the Firebase Blaze plan, region
+`asia-northeast3` next to Firestore. Running since 2026-09-28.
 
-- **Wallet sign-in:** Sign In With Solana through MWA; a function verifies the signature and issues a
-  Firebase custom token whose uid is the wallet address.
-- **Functions:** `authNonce` / `authVerify`; `onWorkoutCreate` (daily totals on the 15:00 UTC boundary,
-  immediate `mark_success` once every day is met, completion points); `everyMinute` (settle, retarget,
-  badge readiness, stuck-pick alert); `daily` at 15:05 UTC (6th-day returns and closes, cohort creation,
-  balance checks, success-rate check).
-- **Firestore collections added:** `cohorts`, `config/testers`, `users/{wallet}/daily`,
-  `users/{wallet}/lockedIn`, `users/{wallet}/badges/{badgeId}/grants`. Access is defined in
-  `firestore.rules`; read that file for the rules themselves.
-- **Alerts:** functions write structured log lines; Cloud Logging log-based alerts email the operator. No
-  mail credentials are stored on the server. Conditions: reward vault below 0.7 ORE, server wallet low on
-  SOL, cohort creation failure, a pick unsettled after 15 minutes, recent success rate above 85%.
-- **Cost controls:** a monthly budget alert and a per-function instance cap (plus automatic billing
-  shutdown if confirmed safe for stored data).
+| Function | Trigger | What it does |
+|---|---|---|
+| `authNonce` | app request | issues a signed nonce valid for 5 minutes |
+| `authVerify` | app request | checks the Sign In With Solana message (domain `jamielimq.github.io`) and its signature, then returns a Firebase custom token whose uid is the wallet address |
+| `onWorkoutCreate` | workout written | counts only signed-in workouts (`uid`, `rawReps`) per 15:00 UTC day by Firestore's create time; sends `mark_success` once every day is met; awards completion points once |
+| `everyMinute` | every minute | mirrors cohort accounts into `cohorts`; settles picks in order, retargets, records results and badge grants; catches up missed success marks; after the deadline returns what is left, records the final state, then closes the cohort |
+| `daily` | 15:05 UTC | creates the next scheduled cohort (amount rule in Section 2); checks server wallet and reward vault balances and the recent success rate |
+
+- **Switches:** `config/ops` holds `paused`, `create3Day` and `create7Day` (`off`, `dryRun` or `on`),
+  `createFrom`, `fallbackCommon` and `testAlert`. Without that document everything is off, so deploying
+  the functions sends no transaction.
+- **RPC:** a dedicated endpoint kept in Secret Manager. Each instance checks its genesis hash and refuses
+  to send transactions if the endpoint is not on mainnet; a public endpoint is a read-only fallback.
+- **Firestore:** added collections are `cohorts`, `config/ops`, `config/testers`, `authLinks`,
+  `authNonces`, `ops`, `users/{wallet}/daily`, `users/{wallet}/lockedIn` and
+  `users/{wallet}/badges/{badgeId}/grants`; completion points go to `points_history` as `li-{kind}-{id}`.
+  Access is defined in `firestore.rules`; read that file for the rules themselves.
+- **Alerts:** one structured log line per alert, at most once an hour for the same alert; a log-based
+  alert policy emails the operator. Kinds: reward vault low, server wallet low on SOL, cohort creation
+  failed (including a price fallback), pick unsettled, success rate high, RPC not mainnet, job error.
+  Thresholds: `functions/src/env.ts`.
+- **Cost controls:** a monthly budget alert and per-function instance caps.
 
 ## 8. App (planned)
 

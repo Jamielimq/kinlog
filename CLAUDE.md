@@ -15,13 +15,18 @@ Subsystem reference — squat detection, Firestore data model, challenge flow, b
 ```bash
 npm run start        # expo start (Metro)
 npm run lint         # expo lint
+npm --prefix functions run typecheck   # server (functions/) tsc
+npm --prefix functions test            # server unit tests
+firebase emulators:exec --only firestore,auth --project demo-kinlog "npm --prefix functions run test:emulator"   # rules and server
 ```
 
 `npm run android` is **banned** — it invokes `npx expo run:android`. See Build Environment for the only sanctioned build path.
 
-There is no test runner configured. The `web` script exists but the app depends on a native Android module and the camera, so web/iOS will not be functional.
+The app has no test runner. The `web` script exists but the app depends on a native Android module and the camera, so web/iOS will not be functional.
 
 Release builds need `KINLOG_UPLOAD_STORE_FILE` / `_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD` set in `android/gradle.properties` (gitignored; see `android/app/build.gradle`).
+
+Firebase deploys (`firestore:rules`, `firestore:indexes`, `functions:<name>`; `--project kinlog-6549a`) need the owner's go-ahead each time. Deploy only what changed, and check `git status functions/src` first: a deploy uploads the working tree, not the commit. Never run `firebase functions:secrets:access` or print a secret; set secrets from a file (`--data-file`) or let the owner type them.
 
 ## Build Environment
 
@@ -104,11 +109,12 @@ Both `shares` (UserStake offset 105) and `share_price` (StakeConfig offset 137) 
 
 `EXPO_PUBLIC_HELIUS_API_KEY` is now optional: if set, the hook uses Helius RPC for higher rate limits, otherwise it falls back to `https://api.mainnet-beta.solana.com`. The hook also best-effort `deleteDoc`s the legacy `users/{addr}/cache/skr_staking` document on every run to drain dead data left over from the pre-PDA implementation; the delete is wrapped in its own try/catch so a rules denial or missing doc is silent.
 
-### Locked In (in progress on `feat/locked-in`)
+### Locked In (`feat/locked-in`: program and server live on mainnet, app in progress)
 Deposit-backed rework of the 3-Day / 7-Day Challenge: 100 SKR deposit + 0.001 SOL Fee, 30 squats a day, then one pick on a 5×5 board whose tier (Common / Rare / Legendary Square) comes from an ORE mining round, paid in ORE from a program vault. Full design: `docs/LOCKED_IN.md`. Revenue modelling lives in `docs/private/` (gitignored; never commit it).
 - **Day boundary is 15:00 UTC (00:00 KST) for everything Locked In** — on-chain cohort times, server daily totals, app copy. The rest of the app still uses the device's local midnight; don't mix the two.
 - **ORE mining program is `oreV3EG1i9BEgiAJ8b177Z2S2rMarzak4NMv1kULvWv`.** `mineRHF5r6S7HyD9SppBfVMXMavDkJsxwGesEvxZr2A` is the legacy v1 program; don't use it. ORE stake program (post-June-2026): `stakecNP3FpiExZPCgZfqRgumVzi6dNqnfrjwXyTgeH`.
-- **Four key roles.** Admin = Squads 2-of-3 (laptop key, jamielim.skr, isollim.skr; sorak.skr is a test phone and is not a member): upgrades, role rotation, limits, `fee_wallet`, deposit pause. Server keys (in `~/.config/kinlog/` and Secret Manager, never in the repo): **cohort creator** (creates cohorts within limits, pays their rent), **attester** (marks success, nothing else), **crank** (settle, retarget, return, close). No key can move deposits or reward ORE anywhere the program's rules don't send them.
+- **Four key roles.** Admin = Squads 2-of-3 (laptop key, jamielim.skr, isollim.skr; sorak.skr is a test phone and is not a member): upgrades, role rotation, limits, `fee_wallet`, deposit pause. Server keys (in `~/.config/kinlog/` and Secret Manager, never in the repo, never printed): **cohort creator** (creates cohorts within limits, pays their rent), **attester** (marks success, nothing else), **crank** (settle, retarget, return, close). No key can move deposits or reward ORE anywhere the program's rules don't send them.
+- **Server:** `functions/` (Cloud Functions v2, `asia-northeast3`): `authNonce` / `authVerify` (Sign In With Solana, domain `jamielimq.github.io`, custom token uid = wallet address), `onWorkoutCreate`, `everyMinute`, `daily`. Switches are in `config/ops`; a missing document means everything is off. Only workouts carrying `uid` and `rawReps` count toward Locked In. Details: `docs/LOCKED_IN.md` section 7.
 - **Program invariants — never weaken:** the only way ORE leaves the reward vault is `claim_reward`; deposits go only back to the depositor; nothing leaves an SKR vault before the cohort ends (there is no cancel instruction).
 - **Copy rules (Locked In screens):** English; no middle dots or em dashes; say "Square" and "Reward", never "box"; no multipliers, jackpot wording or dollar conversions; odds appear only on the join screen's ⓘ Reward odds sheet.
 - Mainnet deploys, any transaction that spends SOL or ORE, and Squads transfers or setting changes need the owner's explicit go-ahead each time.

@@ -4,7 +4,7 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import * as P from "../chain/program.ts";
 import { ChainTxError, type CohortKey, isProgramError, keyOf } from "../chain/types.ts";
-import { refreshCohorts } from "../cohorts.ts";
+import { mirrorFields, refreshCohorts } from "../cohorts.ts";
 import { BADGE_PREFIX, THRESHOLDS } from "../env.ts";
 import { alert, errText } from "../log.ts";
 import { type Ops, readOps } from "../ops.ts";
@@ -62,7 +62,7 @@ async function sweepAttest(deps: Deps, ops: Ops, k: CohortKey, c: P.Cohort, nowM
   }
 }
 
-async function returnAndClose(deps: Deps, k: CohortKey, c: P.Cohort, nowSec: number, sum: MinuteSummary): Promise<P.Cohort | null> {
+async function returnAndClose(deps: Deps, k: CohortKey, c: P.Cohort, mirror: Record<string, unknown>, nowSec: number, sum: MinuteSummary): Promise<P.Cohort | null> {
   // Wall clock first (cheap), then the chain clock the program checks.
   if (nowSec < Number(c.deadlineTs) || (await deps.chain.getClock()) < Number(c.deadlineTs)) return c;
   let sent = 0;
@@ -79,6 +79,10 @@ async function returnAndClose(deps: Deps, k: CohortKey, c: P.Cohort, nowSec: num
   const fresh = (await deps.chain.getCohorts([k]))[0];
   if (!fresh) return null;
   if (fresh.returned !== fresh.participants) return fresh;
+  // Closing deletes the account and its slots, so record the final state first: the returns above and
+  // any withdrawal since the last sync. If this throws nothing is closed, and the next run tries again.
+  await deps.db.doc(`cohorts/${keyOf(k)}`).set({ ...mirrorFields(k, fresh, nowSec), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await syncSlots(deps.db, k, fresh, mirror, true);
   await deps.chain.closeCohort(k, fresh.creator);
   sum.closed++;
   return null;
@@ -163,7 +167,7 @@ export async function runEveryMinute(deps: Deps, opts: { sweep?: boolean } = {})
       if (!ops.paused) {
         c = await settlePending(deps, lc.key, c, boardRound, sum);
         if (sweep) await sweepAttest(deps, ops, lc.key, c, nowMs, sum);
-        c = await returnAndClose(deps, lc.key, c, nowMs / 1000, sum);
+        c = await returnAndClose(deps, lc.key, c, lc.mirror, nowMs / 1000, sum);
       }
       if (c) {
         await syncSlots(db, lc.key, c, lc.mirror, sweep);

@@ -199,6 +199,8 @@ describe("everyMinute", () => {
   let chain: FakeChain;
   let t0: number;
   const deps = (nowMs?: number) => ({ db, chain, nowMs: () => nowMs ?? chain.nowSec * 1000 });
+  const lockedIn = async (u: PublicKey) => (await db.doc(`users/${u.toBase58()}/lockedIn/0-2`).get()).data();
+  const pastDeadline = () => (chain.nowSec = t0 + 3 * 600 + 5 * 600 + 1);
 
   function successful(n: number) {
     const users = Array.from({ length: n }, () => newWallet());
@@ -267,17 +269,47 @@ describe("everyMinute", () => {
     assert.equal(sent.filter((k) => k.startsWith("pick_stuck")).length, 1);
   });
 
-  test("after the deadline returns what is left, then closes the cohort", async () => {
+  test("after the deadline returns what is left, records every slot, then closes the cohort", async () => {
     const [a, b] = successful(2);
-    chain.withdraw(key, a); // a withdrew on their own
-    chain.nowSec = t0 + 3 * 600 + 5 * 600 + 1; // deadline passed
+    chain.withdraw(key, a); // a withdrew on their own (test-user1 in the mainnet test cohort)
+    await runEveryMinute(deps());
+    assert.equal((await lockedIn(a))?.returned, true);
+    assert.equal((await lockedIn(b))?.returned, false);
+    pastDeadline();
     const sum = await runEveryMinute(deps());
     assert.equal(sum.returned, 1);
     assert.equal(sum.closed, 1);
     assert.equal(chain.cohorts.has("0-2"), false);
     assert.deepEqual(chain.sent.filter((t) => t.op === "returnDeposit").map((t) => t.user), [b.toBase58()]);
+    // b's return (test-user2's case) was recorded before the close took the slots away.
+    assert.equal((await lockedIn(b))?.returned, true);
+    assert.equal((await lockedIn(a))?.returned, true);
+    assert.equal((await db.doc("cohorts/0-2").get()).data()?.returned, 2);
     await runEveryMinute(deps());
     assert.equal((await db.doc("cohorts/0-2").get()).data()!.status, "closed");
+  });
+
+  test("a withdrawal after the last sync is recorded when the same run closes the cohort", async () => {
+    const [a] = successful(1);
+    await runEveryMinute(deps());
+    assert.equal((await lockedIn(a))?.returned, false);
+    chain.withdraw(key, a); // just before the deadline, after the last sync
+    pastDeadline();
+    const sum = await runEveryMinute(deps());
+    assert.deepEqual([sum.returned, sum.closed], [0, 1]);
+    assert.equal((await lockedIn(a))?.returned, true);
+  });
+
+  test("a failed close keeps the final record and closes on the next run", async () => {
+    const [a] = successful(1);
+    pastDeadline();
+    chain.failNext.set("closeCohort", new ChainTxError("fake: blockhash expired"));
+    let sum = await runEveryMinute(deps());
+    assert.deepEqual([sum.returned, sum.closed], [1, 0]);
+    assert.equal((await lockedIn(a))?.returned, true, "recorded before the close was attempted");
+    assert.deepEqual(await alertsSent(), ["job_error:everyMinute:0-2"]);
+    sum = await runEveryMinute(deps());
+    assert.equal(sum.closed, 1);
   });
 
   test("the test alert switch writes one alert", async () => {

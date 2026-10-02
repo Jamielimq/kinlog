@@ -125,6 +125,14 @@ async function saveWorkout(address: string, reps: number, elapsed: number) {
   const newTotalWorkouts = (userData.totalWorkouts ?? 0) + (alreadyWorkedOutToday ? 0 : 1)
   const pts = effectiveReps * POINTS_PER_REP
 
+  // The workout is the source of truth and the only record Locked In counts, so it is written
+  // first: if the rules refuse it, nothing else changes. `uid` marks it as written with this
+  // wallet's own sign-in; `rawReps` is the count shown on screen, before the daily points cap
+  // that produced effectiveReps. elapsed is whole seconds (the rules require >= rawReps).
+  await addDoc(collection(db, 'users', address, 'workouts'), {
+    exercise: 'squat', reps: effectiveReps, rawReps: reps, elapsed, createdAt: now, uid: address,
+  })
+
   await setDoc(userRef, {
     totalSquats: newTotalSquats,
     totalWorkouts: newTotalWorkouts,
@@ -143,10 +151,6 @@ async function saveWorkout(address: string, reps: number, elapsed: number) {
       createdAt: now,
     })
   }
-
-  await addDoc(collection(db, 'users', address, 'workouts'), {
-    exercise: 'squat', reps: effectiveReps, elapsed, createdAt: now,
-  })
 
   if (!alreadyWorkedOutToday) {
     const weeklySnap = await getDoc(doc(db, 'users', address, 'goals', 'weekly'))
@@ -346,10 +350,15 @@ export default function WorkoutScreen() {
   const [angle, setAngle] = useState(180)
   const [elapsed, setElapsed] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [workoutResult, setWorkoutResult] = useState<{ type: 'success' | 'already' | 'error'; reps?: number; pts?: number } | null>(null)
+  const [workoutResult, setWorkoutResult] = useState<{
+    type: 'success' | 'already' | 'refused' | 'error'; reps?: number; pts?: number; elapsed?: number
+  } | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const repsRef = useRef(0)
   const elapsedRef = useRef(0)
+  // Wall-clock start of the session. The 1 s interval only refreshes the display: it runs late
+  // while the detection loop keeps JS busy, and a saved elapsed below the rep count is refused.
+  const startedAtRef = useRef(0)
   const phaseRef = useRef<'up' | 'down'>('up')
   const isActiveRef = useRef(false)
 
@@ -368,8 +377,11 @@ export default function WorkoutScreen() {
   const skipCountRef = useRef(0)
   const debugDirRef = useRef<string | null>(null)
 
-  const { publicKey } = useWallet()
-  const address = publicKey?.toBase58() ?? null
+  const { publicKey, dataAddress, session, signIn, signInError, awaitingSignIn } = useWallet()
+  // Workouts are saved only with the wallet's own sign-in, so a connected wallet without one signs
+  // in before it can start (a session with no wallet at all is still allowed, unsaved).
+  const address = dataAddress
+  const needsSignIn = publicKey !== null && address === null
   const { initialized: poseReady, detect, getDebugDir, saveDebugFrame } = usePoseLandmarker(POSE_VIDEO_MODE)
 
   useEffect(() => {
@@ -399,7 +411,7 @@ export default function WorkoutScreen() {
       }, 1500)
     }
     const completedReps = repsRef.current
-    const completedElapsed = elapsedRef.current
+    const completedElapsed = Math.round((Date.now() - startedAtRef.current) / 1000)
     if (completedReps > 0 && address) {
       setSaving(true)
       try {
@@ -409,9 +421,12 @@ export default function WorkoutScreen() {
         } else {
           setWorkoutResult({ type: 'already' })
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error('Save error:', e)
-        setWorkoutResult({ type: 'error' })
+        // The rules refused the workout (for example faster than 1 rep per second): say so with
+        // the numbers, so the reps don't just disappear behind a generic error.
+        const refused = e?.code === 'firestore/permission-denied'
+        setWorkoutResult({ type: refused ? 'refused' : 'error', reps: completedReps, elapsed: completedElapsed })
       } finally {
         setSaving(false)
       }
@@ -659,7 +674,11 @@ export default function WorkoutScreen() {
     repsRef.current = 0; elapsedRef.current = 0; phaseRef.current = 'up'
     resetJudgement()
     setIsActive(true); setReps(0); setElapsed(0); setPhase('up'); setAngle(180)
-    timerRef.current = setInterval(() => { elapsedRef.current += 1; setElapsed(s => s + 1) }, 1000)
+    startedAtRef.current = Date.now()
+    timerRef.current = setInterval(() => {
+      elapsedRef.current = Math.floor((Date.now() - startedAtRef.current) / 1000)
+      setElapsed(elapsedRef.current)
+    }, 1000)
   }
 
   const resetSession = () => {
@@ -765,17 +784,28 @@ export default function WorkoutScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.btnPrimary, isActive && s.btnStop]}
-            onPress={isActive ? stopSession : startSession}
-            disabled={saving}
+            onPress={isActive ? stopSession : needsSignIn ? signIn : startSession}
+            disabled={saving || (!isActive && needsSignIn && !(awaitingSignIn && session === 'needed'))}
           >
-            <Text style={s.btnPrimaryText}>{saving ? 'Saving...' : isActive ? '⏸  Pause' : '▶  Start'}</Text>
+            <Text style={s.btnPrimaryText}>
+              {saving ? 'Saving...'
+                : isActive ? '⏸  Pause'
+                : !needsSignIn ? '▶  Start'
+                : session === 'checking' ? 'Checking...'
+                : !awaitingSignIn ? 'Connecting...'
+                : session === 'signingIn' ? 'Signing in...'
+                : 'Sign in'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.btnSecondary}>
             <Text style={s.btnSecondaryText}>Goal</Text>
           </TouchableOpacity>
         </View>
 
-        {!address && <Text style={s.noWalletNote}>⚠ Connect wallet to save workouts</Text>}
+        {!publicKey && <Text style={s.noWalletNote}>⚠ Connect wallet to save workouts</Text>}
+        {awaitingSignIn && !isActive && (
+          <Text style={s.noWalletNote}>{signInError ?? '⚠ Sign in to save workouts'}</Text>
+        )}
         <Text style={s.videoNote}>📵 This video is not recorded or saved</Text>
         {!poseReady && isActive && <Text style={s.noWalletNote}>⏳ Initializing pose detection...</Text>}
       </View>
@@ -804,6 +834,15 @@ export default function WorkoutScreen() {
               <Text style={{ fontSize: 40, marginBottom: 12 }}>💪</Text>
               <Text style={s.modalTitle}>Daily Goal Reached!</Text>
               <Text style={s.modalDesc}>You've already completed today's 30 squats. Come back tomorrow!</Text>
+            </>)}
+            {workoutResult?.type === 'refused' && (<>
+              <Text style={{ fontSize: 40, marginBottom: 12 }}>⚠️</Text>
+              <Text style={s.modalTitle}>Workout not saved</Text>
+              <Text style={s.modalDesc}>
+                {(workoutResult.elapsed ?? 0) < (workoutResult.reps ?? 0)
+                  ? `${workoutResult.reps} squats were counted in ${workoutResult.elapsed} seconds. Workouts are saved at up to 1 squat per second, so this one was not accepted.`
+                  : `The server did not accept this workout (${workoutResult.reps} squats). Please sign in again before your next workout.`}
+              </Text>
             </>)}
             {workoutResult?.type === 'error' && (<>
               <Text style={{ fontSize: 40, marginBottom: 12 }}>⚠️</Text>

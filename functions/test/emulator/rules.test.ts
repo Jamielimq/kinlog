@@ -201,6 +201,18 @@ test("signed-in workouts: owner only, plausible, immutable", async () => {
   await assertFails(deleteDoc(doc(out, `users/${W1}/workouts/signed`)));
 });
 
+test("the app's signed-in workout is accepted, before and after the daily points cap", async () => {
+  // Field for field what app/(tabs)/workout.tsx saveWorkout writes with a session.
+  const appWorkout = (reps: number, rawReps: number) => ({
+    exercise: "squat", reps, rawReps, elapsed: 45, createdAt: Date.now(), uid: W2,
+  });
+  const col = collection(signedIn(W2), `users/${W2}/workouts`);
+  // First session of the day: the whole count earns points.
+  await assertSucceeds(addDoc(col, appWorkout(30, 30)));
+  // Points cap already used: reps is 0, rawReps keeps the count shown on screen.
+  await assertSucceeds(addDoc(col, appWorkout(0, 30)));
+});
+
 test("test cohorts are visible to testers only", async () => {
   const out = signedOut();
   await assertSucceeds(getDoc(doc(out, "cohorts/0-20261004")));

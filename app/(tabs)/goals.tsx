@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { SignInGate } from '../../components/SignInGate'
 import { useWallet } from '../../context/WalletContext'
 import { useGoals } from '../../hooks/useGoals'
 import { useWeeklyChart } from '../../hooks/useWeeklyChart'
@@ -12,8 +13,8 @@ const C = {
 }
 
 export default function GoalsScreen() {
-  const { publicKey } = useWallet()
-  const address = publicKey?.toBase58() ?? null
+  const { publicKey, dataAddress } = useWallet()
+  const address = dataAddress
   const { goals, loading } = useGoals(address)
   const { days } = useWeeklyChart(address)
 
@@ -34,6 +35,7 @@ export default function GoalsScreen() {
             <Text style={s.noWalletText}>Connect your wallet to track goals</Text>
           </View>
         )}
+        <SignInGate />
 
         {/* Goal cards */}
         {goals.map((g) => {

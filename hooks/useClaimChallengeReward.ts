@@ -45,7 +45,7 @@ const MEMO_PROGRAM_ID = new PublicKey(
 );
 
 export function useClaimChallengeReward() {
-  const { publicKey, authorizeAndSign } = useWallet();
+  const { publicKey, authorizeAndSign, dataAddress } = useWallet();
   const [isClaiming, setIsClaiming] = useState(false);
 
   const claimChallengeReward = useCallback(
@@ -54,9 +54,12 @@ export function useClaimChallengeReward() {
     ): Promise<{ txSignature: string; awardedPoints: number }> => {
       setIsClaiming(true);
       try {
-        const address = publicKey?.toBase58() ?? null;
-        if (!address || !publicKey) {
+        if (!publicKey) {
           throw new Error('Wallet not connected.');
+        }
+        const address = dataAddress;
+        if (!address) {
+          throw new Error('Please sign in first.');
         }
 
         const instance = view.instance;
@@ -213,7 +216,7 @@ export function useClaimChallengeReward() {
         setIsClaiming(false);
       }
     },
-    [publicKey, authorizeAndSign],
+    [publicKey, authorizeAndSign, dataAddress],
   );
 
   return { claimChallengeReward, isClaiming };

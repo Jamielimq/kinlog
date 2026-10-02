@@ -62,8 +62,8 @@ export default function ChallengeDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>()
   const id = typeof params.id === 'string' ? params.id : ''
 
-  const { publicKey, connecting, connect } = useWallet()
-  const address = publicKey?.toBase58() ?? null
+  const { publicKey, connecting, connect, dataAddress } = useWallet()
+  const address = dataAddress
 
   const { challenges, loading } = useChallenges(address)
   const { goals } = useGoals(address)

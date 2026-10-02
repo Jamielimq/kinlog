@@ -3,6 +3,7 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { SignInGate } from '../../components/SignInGate'
 import { useWallet } from '../../context/WalletContext'
 import { useChallenges, type ChallengeView } from '../../hooks/useChallenges'
 import { useGoals } from '../../hooks/useGoals'
@@ -45,8 +46,8 @@ function liveDayIndex(q: ChallengeView): number {
 }
 
 export default function HomeScreen() {
-  const { publicKey, shortAddress, connecting, restoring, connect, disconnect } = useWallet()
-  const address = publicKey?.toBase58() ?? null
+  const { publicKey, shortAddress, connecting, restoring, connect, disconnect, dataAddress, awaitingSignIn } = useWallet()
+  const address = dataAddress
   const { history } = usePoints(address)
   const { goals } = useGoals(address)
   const { stats } = useUserStats(address)
@@ -99,6 +100,8 @@ export default function HomeScreen() {
           <Text style={s.greetSub}>{getGreeting()}</Text>
           <Text style={s.greetTitle}>Ready to move?</Text>
         </View>
+
+        <SignInGate />
 
         {/* Today's Progress Card */}
         <View style={s.progressCard}>
@@ -278,6 +281,13 @@ export default function HomeScreen() {
             <View style={s.emptyState}>
               <Text style={s.emptyText}>Connect your wallet to see activity</Text>
             </View>
+          ) : !address ? (
+            // Connecting or checking: say nothing until it's clear a sign-in is needed.
+            awaitingSignIn ? (
+              <View style={s.emptyState}>
+                <Text style={s.emptyText}>Sign in to see activity</Text>
+              </View>
+            ) : null
           ) : history.length === 0 ? (
             <View style={s.emptyState}>
               <Text style={s.emptyText}>No activity yet. Start your first workout!</Text>

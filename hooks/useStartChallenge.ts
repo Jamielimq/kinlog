@@ -37,7 +37,7 @@ const MEMO_PROGRAM_ID = new PublicKey(
 );
 
 export function useStartChallenge() {
-  const { publicKey, authorizeAndSign } = useWallet();
+  const { publicKey, authorizeAndSign, dataAddress } = useWallet();
   const [isStarting, setIsStarting] = useState(false);
 
   const startChallenge = useCallback(
@@ -46,9 +46,12 @@ export function useStartChallenge() {
     ): Promise<{ instanceId: string; txSignature: string }> => {
       setIsStarting(true);
       try {
-        const address = publicKey?.toBase58() ?? null;
-        if (!address || !publicKey) {
+        if (!publicKey) {
           throw new Error('Wallet not connected.');
+        }
+        const address = dataAddress;
+        if (!address) {
+          throw new Error('Please sign in first.');
         }
 
         const db = getFirestore(getApp());
@@ -183,7 +186,7 @@ export function useStartChallenge() {
         setIsStarting(false);
       }
     },
-    [publicKey, authorizeAndSign],
+    [publicKey, authorizeAndSign, dataAddress],
   );
 
   return { startChallenge, isStarting };

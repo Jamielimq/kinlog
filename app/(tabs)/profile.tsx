@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { SignInGate } from '../../components/SignInGate'
 import { useWallet } from '../../context/WalletContext'
 import { useBadges } from '../../hooks/useBadges'
 import { usePoints } from '../../hooks/usePoints'
@@ -22,8 +23,8 @@ function getActivityIcon(reason: string) {
 }
 
 export default function ProfileScreen() {
-  const { publicKey, shortAddress, connecting, restoring, connect, disconnect } = useWallet()
-  const address = publicKey?.toBase58() ?? null
+  const { publicKey, shortAddress, connecting, restoring, connect, disconnect, dataAddress } = useWallet()
+  const address = dataAddress
   const { stats } = useUserStats(address)
   const { badges } = useBadges(address)
   const { history } = usePoints(address)
@@ -63,6 +64,8 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        <SignInGate />
 
         {/* Profile Card */}
         <View style={s.profileCard}>

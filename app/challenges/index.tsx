@@ -24,8 +24,8 @@ const byReqDays = (a: ChallengeView, b: ChallengeView) =>
   a.catalog.requirementDays - b.catalog.requirementDays
 
 export default function ChallengesScreen() {
-  const { publicKey, connecting, connect } = useWallet()
-  const address = publicKey?.toBase58() ?? null
+  const { publicKey, connecting, connect, dataAddress } = useWallet()
+  const address = dataAddress
   const { challenges, instances, loading } = useChallenges(address)
   const { startChallenge } = useStartChallenge()
   const [startingId, setStartingId] = useState<string | null>(null)

@@ -4,6 +4,7 @@ import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl } from
 import { useEffect, useState } from 'react'
 import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { SignInGate } from '../../components/SignInGate'
 import { RARITY_COLOR } from '../../constants/rarity'
 import { useWallet } from '../../context/WalletContext'
 import { useBadges } from '../../hooks/useBadges'
@@ -23,8 +24,8 @@ const TREASURY_WALLET = new PublicKey('EyEohuV8fBXyNDZK9ZtYFNe6A6FfUw9ndSwBbtNqT
 const MINT_FEE_LAMPORTS = 1_000_000 // 0.001 SOL
 
 export default function BadgesScreen() {
-  const { publicKey, shortAddress, connecting, connect, disconnect, authorizeAndSign } = useWallet()
-  const address = publicKey?.toBase58() ?? null
+  const { publicKey, shortAddress, connecting, connect, disconnect, authorizeAndSign, dataAddress } = useWallet()
+  const address = dataAddress
   const { badges, loading } = useBadges(address)
   const [showDisconnect, setShowDisconnect] = useState(false)
   const [activeTab, setActiveTab] = useState('all')
@@ -163,6 +164,8 @@ export default function BadgesScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        <SignInGate />
 
         {/* Stats row */}
         <View style={s.statsRow}>

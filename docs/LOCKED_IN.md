@@ -56,9 +56,11 @@ Companion documents: `CLAUDE.md` (working rules, settled product decisions), `do
 | **Rare Square** | the picked square is that round's winning square | 4.0% (1/25, minus overlap with Legendary) |
 | **Common Square** | anything else | 95.8% |
 
-There is no losing outcome. Results come from ORE mining rounds; **if ORE changes its round rules, these
-odds change with them.** The odds are shown in the app only on the Reward odds sheet (ⓘ on the join
-screen).
+There is no losing outcome. Results come from ORE mining rounds. **Kinlog uses ORE's round rules as of
+October 2026. If ORE changes them, these odds stay as listed until Kinlog updates its program.** The program
+does not read ORE's own outcome; it recomputes the winning square and the motherlode from the round's
+entropy with a copy of ORE's rules (Section 5). The odds are shown in the app only on the Reward odds sheet
+(ⓘ on the join screen).
 
 ### Per-challenge caps
 

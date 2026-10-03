@@ -2,11 +2,7 @@ import { getApp } from '@react-native-firebase/app';
 import { deleteDoc, doc, getFirestore } from '@react-native-firebase/firestore';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { useEffect, useState } from 'react';
-
-const HELIUS_API_KEY = process.env.EXPO_PUBLIC_HELIUS_API_KEY;
-const RPC_URL = HELIUS_API_KEY
-  ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
-  : 'https://api.mainnet-beta.solana.com';
+import { RPC_URL } from '../lib/solana';
 
 const STAKING_PROGRAM = new PublicKey('SKRskrmtL83pcL4YqLWt6iPefDqwXQWHSw9S9vz94BZ');
 const STAKE_CONFIG = new PublicKey('4HQy82s9CHTv1GsYKnANHMiHfhcqesYkK6sB3RDSYyqw');

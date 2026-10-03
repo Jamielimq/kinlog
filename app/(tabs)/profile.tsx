@@ -47,7 +47,8 @@ export default function ProfileScreen() {
   const pointsHistory = history
 
   return (
-    <SafeAreaView style={s.safe}>
+    // Top edge only: the tab bar already covers the bottom inset (see app/(tabs)/index.tsx).
+    <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
@@ -132,11 +133,6 @@ export default function ProfileScreen() {
           </View>
           <Text style={s.menuArrow}>›</Text>
         </TouchableOpacity>
-
-        <View style={s.footer}>
-          <Text style={s.footerVersion}>KINLOG · v1.3.3</Text>
-          <Text style={s.footerTagline}>Move daily.</Text>
-        </View>
 
         <View style={{ height: 24 }}/>
       </ScrollView>
@@ -301,7 +297,4 @@ const s = StyleSheet.create({
   modalCancel:         { width: '100%', backgroundColor: C.bg2, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   modalCancelText:     { color: C.text, fontSize: 15, fontWeight: '600' },
 
-  footer:        { paddingTop: 16, paddingBottom: 0, alignItems: 'flex-start' },
-  footerVersion: { fontSize: 10, color: C.muted, letterSpacing: 2, fontWeight: '500' },
-  footerTagline: { fontSize: 10, color: C.muted, fontStyle: 'italic', marginTop: 4 },
 })

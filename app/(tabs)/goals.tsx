@@ -21,7 +21,8 @@ export default function GoalsScreen() {
   const maxReps = Math.max(...days.map(d => d.reps), 1)
 
   return (
-    <SafeAreaView style={s.safe}>
+    // Top edge only: the tab bar already covers the bottom inset (see app/(tabs)/index.tsx).
+    <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Header */}

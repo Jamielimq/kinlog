@@ -3,11 +3,12 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { HowToSheet } from '../../components/HowToSheet'
+import { LockedInCard } from '../../components/lockedIn/LockedInCard'
 import { SignInGate } from '../../components/SignInGate'
 import { useWallet } from '../../context/WalletContext'
 import { useChallenges, type ChallengeView } from '../../hooks/useChallenges'
 import { useGoals } from '../../hooks/useGoals'
-import { usePoints } from '../../hooks/usePoints'
 import { useUserStats } from '../../hooks/useUserStats'
 
 const C = {
@@ -15,22 +16,6 @@ const C = {
   card: '#FFFFFF', dark: '#2D2926', dark2: '#3A3532', dark3: '#57524E',
   amber: '#D97706', amber2: '#F59E0B', amber3: '#FCD34D', amberBg: '#FFFBEB',
   text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
-}
-
-function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 6) return 'LATE NIGHT'
-  if (h < 12) return 'GOOD MORNING'
-  if (h < 18) return 'GOOD AFTERNOON'
-  return 'GOOD EVENING'
-}
-
-function getActivityIcon(reason: string) {
-  const r = reason.toLowerCase()
-  if (r.includes('claimed') || r.includes('minted') || r.includes('nft')) return '✦'
-  if (r.includes('streak')) return '🔥'
-  if (r.includes('badge')) return '🏅'
-  return '🏋️'
 }
 
 // Live calendar day index (instance.progress.dayIndex only updates on workout save).
@@ -46,13 +31,13 @@ function liveDayIndex(q: ChallengeView): number {
 }
 
 export default function HomeScreen() {
-  const { publicKey, shortAddress, connecting, restoring, connect, disconnect, dataAddress, awaitingSignIn } = useWallet()
+  const { publicKey, shortAddress, connecting, restoring, connect, disconnect, dataAddress } = useWallet()
   const address = dataAddress
-  const { history } = usePoints(address)
   const { goals } = useGoals(address)
   const { stats } = useUserStats(address)
   const { challenges } = useChallenges(address)
   const [showDisconnect, setShowDisconnect] = useState(false)
+  const [showHowTo, setShowHowTo] = useState(false)
 
   const dailyGoal = goals.find(g => g.id === 'daily')
   const weeklyGoal = goals.find(g => g.id === 'weekly')
@@ -74,7 +59,9 @@ export default function HomeScreen() {
     })
 
   return (
-    <SafeAreaView style={s.safe}>
+    // Top edge only: the tab bar already covers the bottom inset, and SafeAreaView measures insets
+    // against the whole window, so a bottom edge here left a blank band above the tab bar.
+    <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
@@ -97,7 +84,6 @@ export default function HomeScreen() {
 
         {/* Greeting */}
         <View style={s.greet}>
-          <Text style={s.greetSub}>{getGreeting()}</Text>
           <Text style={s.greetTitle}>Ready to move?</Text>
         </View>
 
@@ -107,12 +93,11 @@ export default function HomeScreen() {
         <View style={s.progressCard}>
           <View style={s.progressTop}>
             <View>
-              <Text style={s.progressLabel}>TODAY'S PROGRESS</Text>
+              <Text style={s.progressLabel}>{"TODAY'S PROGRESS"}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
                 <Text style={s.progressReps}>{reps}</Text>
                 <Text style={s.progressTarget}>/ {target}</Text>
               </View>
-              <Text style={s.progressExercise}>squats</Text>
             </View>
           </View>
           <View style={s.progressBar}>
@@ -140,20 +125,26 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        {/* Start Button */}
+        {/* Start Button: today's count is already in the progress card above */}
         <TouchableOpacity style={s.startBtn} onPress={() => router.push('/workout')} activeOpacity={0.85}>
           <View style={{ flex: 1 }}>
-            <Text style={s.startBtnLabel}>TODAY'S EXERCISE</Text>
             <Text style={s.startBtnExercise}>SQUAT</Text>
             <Text style={s.startBtnTitle}>Start Session</Text>
-            <Text style={s.startBtnSub}>
-              {reps >= target ? 'Goal complete! Come back tomorrow 💪' : `${target - reps} squats remaining today`}
-            </Text>
           </View>
           <View style={s.startBtnIcon}>
             <Text style={{ color: C.amber2, fontSize: 18 }}>▶</Text>
           </View>
         </TouchableOpacity>
+
+        {/* How to squat: a pill like the wallet address one in the header */}
+        <View style={s.howToRow}>
+          <TouchableOpacity style={s.howToPill} onPress={() => setShowHowTo(true)} activeOpacity={0.85}>
+            <Text style={s.howToPillIcon}>ⓘ</Text>
+            <Text style={s.howToPillText}>How to Squat</Text>
+          </TouchableOpacity>
+        </View>
+
+        <LockedInCard />
 
         {/* Quests */}
         {publicKey ? (
@@ -274,41 +265,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Recent Activity */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Recent Activity</Text>
-          {!publicKey ? (
-            <View style={s.emptyState}>
-              <Text style={s.emptyText}>Connect your wallet to see activity</Text>
-            </View>
-          ) : !address ? (
-            // Connecting or checking: say nothing until it's clear a sign-in is needed.
-            awaitingSignIn ? (
-              <View style={s.emptyState}>
-                <Text style={s.emptyText}>Sign in to see activity</Text>
-              </View>
-            ) : null
-          ) : history.length === 0 ? (
-            <View style={s.emptyState}>
-              <Text style={s.emptyText}>No activity yet. Start your first workout!</Text>
-            </View>
-          ) : (
-            history.slice(0, 3).map((item, i) => (
-              <View key={item.id ?? i} style={[s.activityRow, i < 2 && s.activityBorder]}>
-                <View style={s.activityIcon}>
-                  <Text style={{ fontSize: 17 }}>{getActivityIcon(item.reason)}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.activityLabel}>{item.reason}</Text>
-                  <Text style={s.activityTime}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-                </View>
-                <Text style={s.activityPts}>+{item.amount}</Text>
-              </View>
-            ))
-          )}
-        </View>
-
       </ScrollView>
+
+      <HowToSheet visible={showHowTo} onClose={() => setShowHowTo(false)} />
 
       {/* Disconnect Modal */}
       <Modal visible={showDisconnect} transparent animationType="fade">
@@ -336,55 +295,48 @@ const s = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: C.bg },
   scroll: { flex: 1, paddingHorizontal: 20 },
 
-  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16 },
-  logo:               { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
+  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, paddingBottom: 11 },
+  logo:               { fontSize: 30, fontWeight: '800', letterSpacing: -0.5 },
   walletBtn:          { backgroundColor: C.dark, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100 },
   walletBtnText:      { color: '#fff', fontSize: 12, fontWeight: '700' },
   walletConnected:    { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.dark, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100 },
   walletDot:          { width: 7, height: 7, borderRadius: 4, backgroundColor: C.amber2 },
   walletConnectedText:{ color: '#fff', fontSize: 12, fontWeight: '700' },
 
-  greet:      { paddingBottom: 14 },
-  greetSub:   { fontSize: 11, color: C.muted, letterSpacing: 1.2, marginBottom: 4 },
+  // Header bottom padding (11) is the whole gap between the logo row and the title.
+  greet:      { paddingBottom: 16 },
   greetTitle: { fontSize: 26, color: C.text, fontWeight: '800', letterSpacing: -0.8 },
 
   progressCard:     { backgroundColor: C.dark, borderRadius: 24, padding: 22, marginBottom: 14 },
   progressTop:      { marginBottom: 16 },
-  progressLabel:    { fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.2, marginBottom: 6 },
+  progressLabel:    { fontSize: 12.5, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.2, marginBottom: 6 },
   progressReps:     { fontSize: 52, color: '#fff', fontWeight: '900', lineHeight: 56 },
   progressTarget:   { fontSize: 15, color: 'rgba(255,255,255,0.35)', marginBottom: 8 },
-  progressExercise: { fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
   progressBar:      { height: 5, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 100, marginBottom: 10, overflow: 'hidden' },
   progressFill:     { height: 5, backgroundColor: C.amber2, borderRadius: 100 },
-  progressNote:     { fontSize: 10, color: 'rgba(255,255,255,0.35)' },
-  progressPct:      { fontSize: 10, fontWeight: '700', color: C.amber2 },
+  progressNote:     { fontSize: 12, color: 'rgba(255,255,255,0.35)' },
+  progressPct:      { fontSize: 12, fontWeight: '700', color: C.amber2 },
 
   statsRow:        { flexDirection: 'row', gap: 10, marginBottom: 14 },
   statCard:        { flex: 1, backgroundColor: C.card, borderRadius: 18, padding: 14, borderWidth: 1.5, borderColor: C.line },
   statCardAccent:  { backgroundColor: C.amberBg, borderColor: `${C.amber}33` },
   statValue:       { fontSize: 20, fontWeight: '800', color: C.text, marginBottom: 4 },
   statValueAccent: { color: C.amber },
-  statLabel:       { fontSize: 9, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase' },
+  statLabel:       { fontSize: 11, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase' },
   statLabelAccent: { color: C.amber },
 
-  startBtn:         { backgroundColor: C.amber2, borderRadius: 18, padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, shadowColor: C.amber, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
-  startBtnLabel:    { fontSize: 9, color: `${C.dark}66`, letterSpacing: 1.5, marginBottom: 2 },
+  startBtn:         { backgroundColor: C.amber2, borderRadius: 18, padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, shadowColor: C.amber, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8 },
   startBtnExercise: { fontSize: 28, fontWeight: '900', color: C.dark, letterSpacing: -0.5, marginBottom: 4 },
-  startBtnTitle:    { fontSize: 16, fontWeight: '800', color: C.dark, marginBottom: 2 },
-  startBtnSub:      { fontSize: 11, color: `${C.dark}99` },
+  startBtnTitle:    { fontSize: 16, fontWeight: '800', color: C.dark },
   startBtnIcon:     { width: 44, height: 44, borderRadius: 22, backgroundColor: C.dark, alignItems: 'center', justifyContent: 'center' },
+  howToRow:         { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 12 },
+  howToPill:        { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.dark, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 100 },
+  howToPillIcon:    { color: C.amber2, fontSize: 13, fontWeight: '800' },
+  howToPillText:    { color: '#fff', fontSize: 12, fontWeight: '700' },
 
   section:       { marginBottom: 24 },
-  sectionTitle:  { fontSize: 17, fontWeight: '900', color: C.text, marginBottom: 12 },
-  activityRow:   { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
-  activityBorder:{ borderBottomWidth: 1, borderBottomColor: C.line },
-  activityIcon:  { width: 40, height: 40, borderRadius: 13, backgroundColor: C.bg2, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: C.line },
-  activityLabel: { fontSize: 12, fontWeight: '600', color: C.text },
-  activityTime:  { fontSize: 10, color: C.muted, marginTop: 2 },
-  activityPts:   { fontSize: 12, fontWeight: '800', color: C.amber2 },
-
-  emptyState:    { paddingVertical: 20, alignItems: 'center' },
-  emptyText:     { fontSize: 12, color: C.muted, textAlign: 'center' },
+  // Same as LockedInCard's sectionTitle, so "Locked In Challenge" and "Quests" match.
+  sectionTitle:  { fontSize: 20, fontWeight: '900', color: C.text, marginBottom: 12 },
 
   questHeadRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
 

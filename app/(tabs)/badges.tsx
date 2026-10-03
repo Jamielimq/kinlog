@@ -144,7 +144,8 @@ export default function BadgesScreen() {
   }
 
   return (
-    <SafeAreaView style={s.safe}>
+    // Top edge only: the tab bar already covers the bottom inset (see app/(tabs)/index.tsx).
+    <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Header */}

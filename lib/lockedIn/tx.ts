@@ -12,12 +12,20 @@ import { errorName } from './program';
 
 // Same priority fee as the server (functions/src/chain/send.ts).
 const PRIORITY_MICROLAMPORTS = 20_000;
-const CONFIRM_TIMEOUT_MS = 60_000;
+// Long enough for a sent transaction to land or for its blockhash to expire (150 blocks after it was
+// fetched, about a minute), so that "unconfirmed" means the RPC couldn't tell us either way.
+const CONFIRM_TIMEOUT_MS = 90_000;
 const CONFIRM_POLL_MS = 1_500;
 
+const messageOf = (e: unknown) => String((e as { message?: unknown })?.message ?? e);
+
+/** What went wrong, for each screen to put in its own words (the join screen: joinErrorAlert). */
 export class TxError extends Error {
   constructor(
-    readonly kind: 'simulation' | 'failed' | 'unconfirmed',
+    // simulation: refused before the wallet opened. network: an RPC call failed before sending.
+    // wallet: the wallet failed (a cancel is not one). failed: landed with an error. expired: never
+    // landed and no longer can. unconfirmed: sent, and the outcome is unknown.
+    readonly kind: 'simulation' | 'network' | 'wallet' | 'failed' | 'expired' | 'unconfirmed',
     readonly code?: number,
     readonly logs: string[] = [],
     // A transaction-level error that no instruction raised, e.g. InsufficientFundsForRent.
@@ -42,29 +50,50 @@ function errorReason(err: unknown): string | undefined {
   return keys.length === 1 && keys[0] !== 'InstructionError' ? keys[0] : undefined;
 }
 
-/** Simulates without signatures; throws TxError('simulation') with the program's error code. */
+/**
+ * Simulates without signatures; throws TxError('simulation') with the program's error code, or
+ * TxError('network') when the RPC can't be reached.
+ */
 export async function simulate(
   connection: Connection,
   payer: PublicKey,
   instructions: TransactionInstruction[],
 ): Promise<{ unitsConsumed?: number; logs: string[] }> {
-  const { blockhash } = await connection.getLatestBlockhash();
-  const message = new Transaction({ feePayer: payer, recentBlockhash: blockhash }).add(...instructions).compileMessage();
-  const sim = await connection.simulateTransaction(new VersionedTransaction(message), {
-    sigVerify: false,
-    replaceRecentBlockhash: true,
-  });
+  let sim: Awaited<ReturnType<Connection['simulateTransaction']>>;
+  try {
+    const { blockhash } = await connection.getLatestBlockhash();
+    const message = new Transaction({ feePayer: payer, recentBlockhash: blockhash }).add(...instructions).compileMessage();
+    sim = await connection.simulateTransaction(new VersionedTransaction(message), {
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+    });
+  } catch (e) {
+    throw new TxError('network', undefined, [], messageOf(e));
+  }
   const logs = sim.value.logs ?? [];
   if (sim.value.err) throw new TxError('simulation', customCode(sim.value.err), logs, errorReason(sim.value.err));
   return { unitsConsumed: sim.value.unitsConsumed, logs };
 }
 
-async function confirm(connection: Connection, signature: string): Promise<void> {
+/**
+ * Waits for the transaction to land, or for its blockhash to expire: once the block height passes
+ * lastValidBlockHeight, a transaction that hasn't landed never will. A failed poll is retried.
+ */
+async function confirm(connection: Connection, signature: string, lastValidBlockHeight: number): Promise<void> {
   const until = Date.now() + CONFIRM_TIMEOUT_MS;
   while (Date.now() < until) {
-    const status = (await connection.getSignatureStatuses([signature])).value[0];
-    if (status?.err) throw new TxError('failed', customCode(status.err), [], errorReason(status.err));
-    if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') return;
+    try {
+      const status = (await connection.getSignatureStatuses([signature])).value[0];
+      if (status?.err) throw new TxError('failed', customCode(status.err), [], errorReason(status.err));
+      if (status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized') return;
+      if (!status && (await connection.getBlockHeight()) > lastValidBlockHeight) {
+        // One more look, in case it landed in a block just before the line.
+        if (!(await connection.getSignatureStatuses([signature])).value[0]) throw new TxError('expired');
+      }
+    } catch (e) {
+      if (e instanceof TxError) throw e;
+      console.log('Confirmation poll failed:', messageOf(e));
+    }
     await new Promise(resolve => setTimeout(resolve, CONFIRM_POLL_MS));
   }
   throw new TxError('unconfirmed');
@@ -86,46 +115,34 @@ export async function sendWithWallet(opts: {
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: PRIORITY_MICROLAMPORTS }),
   ];
   let signature: string | undefined;
-  await opts.authorizeAndSign(async wallet => {
-    // Fetched inside the wallet session so the blockhash is as fresh as possible when signing.
-    const { blockhash } = await connection.getLatestBlockhash();
-    const tx = new Transaction({ feePayer: payer, recentBlockhash: blockhash }).add(...budget, ...instructions);
-    const signatures: string[] = await wallet.signAndSendTransactions({ transactions: [tx] });
-    signature = signatures[0];
-  });
+  let lastValidBlockHeight = 0;
+  try {
+    await opts.authorizeAndSign(async wallet => {
+      // Fetched inside the wallet session so the blockhash is as fresh as possible when signing.
+      let latest: { blockhash: string; lastValidBlockHeight: number };
+      try {
+        latest = await connection.getLatestBlockhash();
+      } catch (e) {
+        throw new TxError('network', undefined, [], messageOf(e));
+      }
+      lastValidBlockHeight = latest.lastValidBlockHeight;
+      const tx = new Transaction({ feePayer: payer, recentBlockhash: latest.blockhash }).add(...budget, ...instructions);
+      const signatures: string[] = await wallet.signAndSendTransactions({ transactions: [tx] });
+      signature = signatures[0];
+    });
+  } catch (e) {
+    // A cancel passes through unchanged (the caller shows nothing); anything else the wallet raised
+    // is a wallet error.
+    if (e instanceof TxError || isWalletCancel(e)) throw e;
+    throw new TxError('wallet', undefined, [], messageOf(e));
+  }
   if (!signature) throw new TxError('unconfirmed');
-  await confirm(connection, signature);
+  await confirm(connection, signature, lastValidBlockHeight);
   return signature;
 }
 
 /** The user closed the wallet without approving: not an error worth showing. */
 export function isWalletCancel(e: unknown): boolean {
-  const msg = String((e as { message?: unknown })?.message ?? e);
+  const msg = messageOf(e);
   return msg.includes('CancellationException') || msg.toLowerCase().includes('cancelled');
-}
-
-/** Copy for a failed Locked In transaction. Describes what was observed, nothing more. */
-export function txErrorMessage(e: unknown): string {
-  if (!(e instanceof TxError)) return "Couldn't send the transaction. Please try again.";
-  if (e.kind === 'unconfirmed') return "Couldn't confirm the transaction. Check your wallet before trying again.";
-  // The wallet would be left below the minimum balance Solana requires an account to keep.
-  if (e.reason === 'InsufficientFundsForRent') return 'Not enough SOL. A Solana wallet must keep a small minimum balance after the fee.';
-  if (e.reason === 'InsufficientFundsForFee' || e.reason === 'AccountNotFound') return 'Not enough SOL for the network fee.';
-  if (e.code === 1) {
-    // Custom(1) is the token program's or the system program's "insufficient" error.
-    if (e.logs.some(l => l.toLowerCase().includes('insufficient lamports'))) return 'Not enough SOL for the fee.';
-    return 'Not enough SKR in this wallet.';
-  }
-  if (e.code === 3012) return 'This wallet has no SKR token account.';
-  switch (e.code === undefined ? undefined : errorName(e.code)) {
-    case 'DepositsPaused': return 'Joining is paused right now.';
-    case 'JoiningClosed': return 'Joining has closed for this challenge.';
-    case 'CohortFull': return 'This challenge is full.';
-    case 'AlreadyJoined': return 'You have already joined this challenge.';
-    case 'Unauthorized': return "Couldn't prepare the transaction. Please try again.";
-    default:
-      return e.kind === 'simulation'
-        ? 'The program did not accept this transaction.'
-        : 'The transaction failed on chain.';
-  }
 }

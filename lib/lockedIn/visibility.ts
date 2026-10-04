@@ -1,7 +1,7 @@
 // Which Locked In cohorts the home card shows, and what an ended one still asks of the wallet.
 // Pure, so both can be checked without a device.
 import type { CohortView } from '../../hooks/useCohorts';
-import { formatUtc } from './time';
+import { formatUtc, NBSP } from './time';
 
 /** A cohort this wallet joined, from the server's users/{wallet}/lockedIn record. */
 export interface JoinedCohort {
@@ -49,8 +49,8 @@ export function shownCohorts(cohorts: CohortView[], joined: JoinedCohort[], nowS
 export function dueLines(c: CohortView, j: JoinedCohort): string[] {
   const d = formatUtc(c.deadlineTs);
   const lines: string[] = [];
-  if (j.success && !j.picked) lines.push(`Pick a Square by ${d}, or the reward expires.`);
-  else if (j.success && !j.claimed) lines.push(`Claim your reward by ${d}, or it expires.`);
-  if (!j.returned) lines.push(`Withdraw your SKR, or it returns automatically after ${d}.`);
+  if (j.success && !j.picked) lines.push(`Pick a Square by${NBSP}${d}, or the reward expires.`);
+  else if (j.success && !j.claimed) lines.push(`Claim your reward by${NBSP}${d}, or it expires.`);
+  if (!j.returned) lines.push(`Withdraw your SKR, or it returns automatically after${NBSP}${d}.`);
   return lines;
 }

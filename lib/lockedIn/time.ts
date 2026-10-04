@@ -12,8 +12,14 @@ export const cohortDayIndex = (startTs: number, daySeconds: number, atMs: number
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** "Oct 3, 15:00 UTC" */
+/**
+ * A space that never breaks a line. Copy puts it between a date and the short word before it
+ * ("after Oct 11"), so the two always land on the same line.
+ */
+export const NBSP = ' ';
+
+/** "Oct 3, 15:00 UTC". A line can break only after the comma, never inside "Oct 3" or "15:00 UTC". */
 export function formatUtc(sec: number): string {
   const d = new Date(sec * 1000);
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+  return `${MONTHS[d.getUTCMonth()]}${NBSP}${d.getUTCDate()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}${NBSP}UTC`;
 }

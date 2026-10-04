@@ -76,20 +76,20 @@ export function signInErrorMessage(e: unknown): string {
   switch (code) {
     case 'unavailable':
     case 'network':
-      return "Couldn't reach the sign-in server. Please try again.";
+      return "Couldn't reach the sign-in server. Try again.";
     case 'nonce_expired':
     case 'nonce_used':
-      return 'The sign-in request expired. Please try again.';
+      return 'The sign-in request expired. Try again.';
     case 'invalid_message':
     case 'invalid_signature':
     case 'invalid_nonce':
     case 'invalid_request':
-      return 'The sign-in signature was not accepted. Please try again.';
+      return 'The sign-in signature was not accepted. Try again.';
     case 'no_signature':
-      return "The wallet didn't return a sign-in signature. Please try again.";
+      return "The wallet didn't return a sign-in signature. Try again.";
     case 'account_mismatch':
-      return 'The wallet signed in with a different account. Please try again.';
+      return 'The wallet signed in with a different account. Try again.';
     default:
-      return "Couldn't sign in. Please try again.";
+      return "Couldn't sign in. Try again.";
   }
 }

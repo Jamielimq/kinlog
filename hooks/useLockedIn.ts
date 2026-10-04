@@ -37,6 +37,8 @@ export function useLockedIn(cohort: CohortView | null, address: string | null) {
   const [daily, setDaily] = useState<Record<string, number>>({});
   // undefined while loading, null when the wallet has no slot in the cohort.
   const [slot, setSlot] = useState<Slot | null | undefined>(undefined);
+  // Seats as the chain has them: the server's mirror on the cohort document can be a minute behind.
+  const [seats, setSeats] = useState<{ participants: number; capacity: number } | null>(null);
 
   useEffect(() => {
     setProgress(null);
@@ -71,17 +73,23 @@ export function useLockedIn(cohort: CohortView | null, address: string | null) {
     return () => unsubs.forEach(u => u());
   }, [address, dayKeys]);
 
-  const refresh = useCallback(async () => {
+  /** Re-reads the cohort account. Resolves to this wallet's slot (null if none), or undefined if the read failed. */
+  const refresh = useCallback(async (): Promise<Slot | null | undefined> => {
     if (kind === undefined || id === undefined || !address) {
       setSlot(undefined);
-      return;
+      setSeats(null);
+      return undefined;
     }
     try {
       const info = await getConnection().getAccountInfo(cohortPda(kind, id));
       const c = info ? decodeCohort(info.data) : null;
-      setSlot(c?.slots.find(s => s.user.toBase58() === address) ?? null);
+      const mine = c?.slots.find(s => s.user.toBase58() === address) ?? null;
+      setSlot(mine);
+      setSeats(c ? { participants: c.participants, capacity: c.capacity } : null);
+      return mine;
     } catch (e: any) {
       console.log('cohort account read failed:', e?.message ?? e);
+      return undefined;
     }
   }, [kind, id, address]);
 
@@ -93,7 +101,7 @@ export function useLockedIn(cohort: CohortView | null, address: string | null) {
   const dayReps = dayKeys ? realDays.map(d => daily[d] ?? 0) : progress?.dayReps ?? [];
   const joined = !!slot || !!progress;
 
-  return { progress, slot, joined, dayReps, refresh };
+  return { progress, slot, seats, joined, dayReps, refresh };
 }
 
 /**

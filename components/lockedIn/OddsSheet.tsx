@@ -5,10 +5,11 @@ const C = {
   dark: '#2D2926', amber: '#D97706', text: '#1C1917', sub: '#78716C', line: '#E7E5E4',
 }
 
-// The only place in the app that shows odds (docs/LOCKED_IN.md, sections 2 and 8).
+// The only place in the app that shows odds (docs/LOCKED_IN.md, sections 2 and 8). Each "1 in N"
+// sits on its own line under the sentence.
 const ROWS = [
-  { tier: 'Legendary Square', odds: '0.2%', detail: 'The ORE round your pick targets hits the motherlode (1 in 500).' },
-  { tier: 'Rare Square', odds: '4.0%', detail: "Your Square is that round's winning square (1 in 25)." },
+  { tier: 'Legendary Square', odds: '0.2%', detail: 'The ORE round your pick targets hits the motherlode.\n(1 in 500)' },
+  { tier: 'Rare Square', odds: '4.0%', detail: "Your Square is that round's winning square.\n(1 in 25)" },
   { tier: 'Common Square', odds: '95.8%', detail: 'Every other pick.' },
 ]
 
@@ -26,12 +27,11 @@ export function OddsSheet({ visible, onClose }: { visible: boolean; onClose: () 
           </View>
         ))}
         <Text style={s.note}>
-          Every pick wins at least a Common Square. Each challenge has at most 1 Legendary and 3 Rare
-          Squares; a pick whose tier is already full gets the next tier down.
+          Every pick wins at least a Common Square. Each challenge has at most 1 Legendary and 3 Rare Squares.
         </Text>
         <Text style={s.note}>
-          Results come from ORE mining rounds. Kinlog uses ORE&apos;s round rules as of October 2026. If ORE
-          changes them, these odds stay as listed until Kinlog updates its program.
+          Results come from <Text style={s.strong}>ORE mining rounds</Text>. Kinlog uses ORE&apos;s round rules
+          as of October 2026. If ORE changes them, these odds stay as listed until Kinlog updates its program.
         </Text>
       </ScrollView>
       <TouchableOpacity style={s.btn} onPress={onClose} activeOpacity={0.85}>
@@ -48,6 +48,8 @@ const s = StyleSheet.create({
   detail:  { fontSize: 12, color: C.sub, lineHeight: 17 },
   odds:    { fontSize: 15, fontWeight: '800', color: C.amber },
   note:    { fontSize: 12, color: C.sub, lineHeight: 18, marginTop: 12 },
+  // Same emphasis as the join screen's key lines.
+  strong:  { color: C.amber, fontWeight: '600' },
   // Same button as the how-to sheet: fixed height, 17 px text.
   btn:     { backgroundColor: C.dark, borderRadius: 14, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: 20 },
   btnText: { color: '#fff', fontSize: 17, fontWeight: '800' },

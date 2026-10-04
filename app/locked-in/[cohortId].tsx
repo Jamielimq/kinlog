@@ -1,9 +1,10 @@
 import type { PublicKey } from '@solana/web3.js'
 import { router, useLocalSearchParams } from 'expo-router'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { OddsSheet } from '../../components/lockedIn/OddsSheet'
+import { Popup, type PopupAction } from '../../components/Popup'
 import { useWallet } from '../../context/WalletContext'
 import { useCohort } from '../../hooks/useCohorts'
 import { useLockedIn } from '../../hooks/useLockedIn'
@@ -33,6 +34,7 @@ const C = {
 }
 
 const DAILY_TARGET = 30
+const OK_ONLY: PopupAction[] = [{ label: 'OK', primary: true }]
 
 /**
  * SKR (null: no token account) and SOL in one read, plus the minimum balance a wallet must keep
@@ -68,19 +70,30 @@ export default function LockedInScreen() {
   const [joinTx, setJoinTx] = useState<string | null>(null)
   // The program said joining has closed; its clock can be ahead of this phone's.
   const [closedOnChain, setClosedOnChain] = useState(false)
+  // The screen's popup: the Join confirm, or a notice after a Join or sign-in. Its content stays
+  // while it fades out, so closing only clears popupOpen.
+  const [popup, setPopup] = useState<{ title: string; message: string; actions: PopupAction[] } | null>(null)
+  const [popupOpen, setPopupOpen] = useState(false)
+  const showPopup = (p: { title: string; message: string; actions: PopupAction[] }) => {
+    setPopup(p)
+    setPopupOpen(true)
+  }
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [])
 
-  // Set when Sign in is pressed here, so that a failure shows as an alert, the way a failed Join does.
+  // Set when Sign in is pressed here, so that a failure shows in the popup, the way a failed Join does.
   const signingInHere = useRef(false)
   useEffect(() => {
     if (!signingInHere.current || session === 'signingIn') return
     signingInHere.current = false
     // A cancel in the wallet leaves no error, and shows nothing.
-    if (signInError) Alert.alert("Couldn't sign in", signInError, [{ text: 'OK' }])
+    if (signInError) {
+      setPopup({ title: "Couldn't sign in", message: signInError, actions: OK_ONLY })
+      setPopupOpen(true)
+    }
   }, [session, signInError])
 
   const open = !!cohort && !closedOnChain && now / 1000 < joiningClosesTs(cohort)
@@ -124,7 +137,7 @@ export default function LockedInScreen() {
     if (await refresh()) return
     if (e instanceof TxError && e.code !== undefined && errorName(e.code) === 'JoiningClosed') setClosedOnChain(true)
     const { title, body } = joinErrorAlert(e, deposit)
-    Alert.alert(title, body, [{ text: 'OK' }])
+    showPopup({ title, message: body, actions: OK_ONLY })
   }
 
   const join = async () => {
@@ -157,14 +170,14 @@ export default function LockedInScreen() {
     if (!cohort) return
     const deposit = formatAmount(cohort.depositAmount, SKR_DECIMALS)
     // The fee amount is left to the wallet's approval screen, which shows it.
-    Alert.alert(
-      `Join the ${cohort.days}-Day Challenge?`,
-      `${deposit} SKR stays locked until${NBSP}${formatUtc(cohort.endTs)}. After that, you can withdraw it, pass or fail.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Join', onPress: () => void join() },
+    showPopup({
+      title: `Join the ${cohort.days}-Day Challenge?`,
+      message: `${deposit} SKR stays locked until${NBSP}${formatUtc(cohort.endTs)}. After that, you can withdraw it, pass or fail.`,
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Join', primary: true, onPress: () => void join() },
       ],
-    )
+    })
   }
 
   if (loading || !cohort) {
@@ -282,7 +295,7 @@ export default function LockedInScreen() {
           </Text>
         </View>
 
-        {/* One button for every state (lib/lockedIn/joinButton.ts). A Join that fails says why in an alert. */}
+        {/* One button for every state (lib/lockedIn/joinButton.ts). A Join that fails says why in the popup. */}
         {button && (
           <View style={s.joinBox}>
             <TouchableOpacity style={[s.btn, button.grey && s.btnGrey]} onPress={onPress} disabled={!onPress} activeOpacity={0.85}>
@@ -297,6 +310,15 @@ export default function LockedInScreen() {
       </ScrollView>
 
       <OddsSheet visible={showOdds} onClose={() => setShowOdds(false)} />
+      {popup && (
+        <Popup
+          visible={popupOpen}
+          title={popup.title}
+          message={popup.message}
+          actions={popup.actions}
+          onClose={() => setPopupOpen(false)}
+        />
+      )}
     </SafeAreaView>
   )
 }

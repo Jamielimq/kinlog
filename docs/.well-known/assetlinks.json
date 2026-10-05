@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.kinlog.app",
+    "sha256_cert_fingerprints": ["DC:52:92:61:80:A3:EB:21:3F:29:DB:69:68:54:A8:85:51:CA:72:37:8E:D4:1C:BE:00:44:24:95:5A:EA:B0:C6"]
+  }
+}]

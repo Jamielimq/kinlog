@@ -1,0 +1,3 @@
+# Jekyll skips folders that start with a dot. Publish .well-known so that
+# https://kinlog.app/.well-known/assetlinks.json (Digital Asset Links) is served.
+include: [".well-known"]

@@ -29,10 +29,10 @@ test("nonce: issued nonces verify, expire and resist tampering", () => {
 
 test("SIWS text round-trips through parse (wallet-standard format)", () => {
   const f: SignInFields = {
-    domain: "jamielimq.github.io",
+    domain: "kinlog.app",
     address: Keypair.generate().publicKey.toBase58(),
     statement: "Sign in to Kinlog.",
-    uri: "https://jamielimq.github.io/kinlog",
+    uri: "https://kinlog.app",
     version: "1",
     chainId: "mainnet",
     nonce: "abc12345",
@@ -41,7 +41,7 @@ test("SIWS text round-trips through parse (wallet-standard format)", () => {
     resources: ["https://example.com/a", "https://example.com/b"],
   };
   const text = buildSignInMessage(f);
-  assert.ok(text.startsWith("jamielimq.github.io wants you to sign in with your Solana account:\n"));
+  assert.ok(text.startsWith("kinlog.app wants you to sign in with your Solana account:\n"));
   assert.deepEqual(parseSignInMessage(text), f);
   const { statement: _s, resources: _r, ...bare } = f;
   assert.deepEqual(parseSignInMessage(buildSignInMessage(bare)), bare);
@@ -74,8 +74,8 @@ test("checkSignIn refuses everything else", () => {
   const cases: [string, unknown, string][] = [
     ["no body", null, "invalid_request"],
     ["bad address", { ...signedBody(kp), address: "nope" }, "invalid_request"],
-    ["another domain", signedBody(kp, { domain: "kinlog.app" }), "invalid_message"],
-    ["another uri", signedBody(kp, { uri: "https://kinlog.app" }), "invalid_message"],
+    ["the old domain", signedBody(kp, { domain: "jamielimq.github.io" }), "invalid_message"],
+    ["the old uri", signedBody(kp, { uri: "https://jamielimq.github.io/kinlog" }), "invalid_message"],
     ["another chain", signedBody(kp, { chainId: "devnet" }), "invalid_message"],
     ["another version", signedBody(kp, { version: "2" }), "invalid_message"],
     ["message for another wallet", { ...signedBody(other), address: kp.publicKey.toBase58() }, "invalid_message"],

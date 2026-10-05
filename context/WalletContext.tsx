@@ -50,11 +50,11 @@ const WalletContext = createContext<WalletContextType>({
 });
 
 const STORAGE_KEY = 'kinlog.wallet.session';
-// Kinlog's web address is its GitHub Pages site. The trailing slash makes the relative icon path
-// resolve to /kinlog/icon.png however the wallet joins the two.
+// Kinlog's web address, which also hosts the app's Digital Asset Links (/.well-known/assetlinks.json)
+// that wallets check the identity against. The icon path is relative to it: /icon.png.
 const KINLOG_IDENTITY = {
   name: 'Kinlog',
-  uri: 'https://jamielimq.github.io/kinlog/',
+  uri: 'https://kinlog.app',
   icon: 'icon.png',
 } as const;
 const CHAIN = 'solana:mainnet';

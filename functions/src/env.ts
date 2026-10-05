@@ -3,9 +3,10 @@ import { defineSecret } from "firebase-functions/params";
 // Firestore is in asia-northeast3 (Seoul); Firestore triggers must run in the same region.
 export const REGION = "asia-northeast3";
 
-// Sign In With Solana. Kinlog's web address is its GitHub Pages site.
-export const SIWS_DOMAIN = "jamielimq.github.io";
-export const SIWS_URI = "https://jamielimq.github.io/kinlog";
+// Sign In With Solana. Kinlog's web address is kinlog.app (GitHub Pages under a custom domain), which
+// also hosts the app's Digital Asset Links (/.well-known/assetlinks.json).
+export const SIWS_DOMAIN = "kinlog.app";
+export const SIWS_URI = "https://kinlog.app";
 export const SIWS_STATEMENT = "Sign in to Kinlog. This signature does not send a transaction.";
 export const SIWS_CHAIN_ID = "mainnet";
 export const SIWS_VERSION = "1";

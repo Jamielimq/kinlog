@@ -271,8 +271,8 @@ Workout data lives on Solana. Public. Verifiable. Composable.
 
 ## Privacy & Legal
 
-- [Privacy Policy](https://jamielimq.github.io/kinlog/privacy-policy.html)
-- [Terms of Service](https://jamielimq.github.io/kinlog/terms.html)
+- [Privacy Policy](https://kinlog.app/privacy-policy.html)
+- [Terms of Service](https://kinlog.app/terms.html)
 
 All pose detection runs on device. Camera frames are never uploaded. No video is recorded or saved.
 
@@ -305,7 +305,7 @@ A working clinician shipping on Solana Mobile.
 
 ## Links
 
-- [Website](https://jamielimq.github.io/kinlog/)
+- [Website](https://kinlog.app/)
 - [GitHub](https://github.com/Jamielimq/kinlog)
 - [X (Twitter)](https://x.com/CryptoJHLim)
 

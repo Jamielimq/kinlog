@@ -229,7 +229,7 @@ Cloud Functions v2 in `functions/` (TypeScript, Node 22) on the Firebase Blaze p
 | Function | Trigger | What it does |
 |---|---|---|
 | `authNonce` | app request | issues a signed nonce valid for 5 minutes |
-| `authVerify` | app request | checks the Sign In With Solana message (domain `jamielimq.github.io`) and its signature, then returns a Firebase custom token whose uid is the wallet address |
+| `authVerify` | app request | checks the Sign In With Solana message (domain `kinlog.app`) and its signature, then returns a Firebase custom token whose uid is the wallet address |
 | `onWorkoutCreate` | workout written | counts only signed-in workouts (`uid`, `rawReps`) per 15:00 UTC day by Firestore's create time; sends `mark_success` once every day is met; awards completion points once |
 | `everyMinute` | every minute | mirrors cohort accounts into `cohorts`; settles picks in order, retargets, records results and badge grants; catches up missed success marks; after the deadline returns what is left, records the final state, then closes the cohort |
 | `daily` | 15:05 UTC | creates the next scheduled cohort (amount rule in Section 2); checks server wallet and reward vault balances and the recent success rate |

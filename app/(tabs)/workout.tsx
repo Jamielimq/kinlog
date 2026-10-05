@@ -168,8 +168,10 @@ async function saveWorkout(address: string, reps: number, elapsed: number) {
     }, { merge: true })
   }
 
+  // Dated with today, so opening the app later today doesn't take this for an earlier day's count
+  // and reset it (hooks/useGoals.ts resets a document dated before today).
   await setDoc(doc(db, 'users', address, 'goals', 'daily'), {
-    current: Math.min(newDailyReps, TARGET), total: TARGET,
+    current: Math.min(newDailyReps, TARGET), total: TARGET, lastResetDate: todayStart,
   }, { merge: true })
 
   await checkAndAwardBadges(address, newTotalSquats, newStreak)

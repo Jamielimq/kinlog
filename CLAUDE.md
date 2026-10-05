@@ -89,7 +89,7 @@ All paths are under `users/{walletBase58}`:
 - `workouts/{auto}` — `{ exercise, reps, elapsed, createdAt }`. Source of truth for squat totals.
 - `points_history/{auto}` — `{ reason, amount, createdAt }`. Source of truth for points.
 - `badges/{badgeId}` — `{ earned, earnedAt, mintedAt?, nftMint? }`. The catalog itself (`ALL_BADGES`) is hardcoded in `hooks/useBadges.ts`.
-- `goals/{daily|weekly|monthly}` — `{ current, total, lastResetDate }`. Reset on read in `useGoals` if `lastResetDate` is older than the current day/week/month boundary. **Week starts Monday** (`(getDay() + 6) % 7`).
+- `goals/{daily|weekly|monthly}` — `{ current, total, lastResetDate }`. Written by the workout save (daily dated with today) and reset on read in `useGoals` if `lastResetDate` is older than the current day/week/month boundary; the old quest start and v1.3.3 read them. The Home and Goals screens don't show these documents: `useGoals` counts the goals from `workouts` since the earlier of this month's 1st and this week's Monday (device calendar). **Week starts Monday** (`(getDay() + 6) % 7`).
 - `cache/skr_staking` — cached SKR stake account address.
 
 ### Workout write path (`workout.tsx::saveWorkout`)

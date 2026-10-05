@@ -3,7 +3,6 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { SignInGate } from '../../components/SignInGate'
 import { useWallet } from '../../context/WalletContext'
 import { useGoals } from '../../hooks/useGoals'
-import { useWeeklyChart } from '../../hooks/useWeeklyChart'
 
 const C = {
   bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
@@ -15,8 +14,8 @@ const C = {
 export default function GoalsScreen() {
   const { publicKey, dataAddress } = useWallet()
   const address = dataAddress
-  const { goals, loading } = useGoals(address)
-  const { days } = useWeeklyChart(address)
+  // Counted from the workouts on the device's calendar (hooks/useGoals.ts).
+  const { goals, week: days } = useGoals(address)
 
   const maxReps = Math.max(...days.map(d => d.reps), 1)
 
@@ -94,14 +93,17 @@ export default function GoalsScreen() {
                 </View>
               )}
 
-              {/* Monthly dots */}
+              {/* Monthly dots: the days of this month with a workout */}
               {g.tag === 'Monthly' && (
                 <View style={s.dotGrid}>
-                  {Array.from({ length: g.total }, (_, k) => k + 1).map(d => (
-                    <View key={d} style={[s.dot, d <= g.current && s.dotActive]}>
-                      <Text style={[s.dotText, d <= g.current && s.dotTextActive]}>{d}</Text>
-                    </View>
-                  ))}
+                  {Array.from({ length: g.total }, (_, k) => k + 1).map(d => {
+                    const done = g.dates?.includes(d) ?? false
+                    return (
+                      <View key={d} style={[s.dot, done && s.dotActive]}>
+                        <Text style={[s.dotText, done && s.dotTextActive]}>{d}</Text>
+                      </View>
+                    )
+                  })}
                 </View>
               )}
             </View>

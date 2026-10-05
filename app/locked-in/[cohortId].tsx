@@ -14,12 +14,16 @@ import {
   configPda,
   decodeConfig,
   errorName,
+  FLAG,
   formatAmount,
+  hasFlag,
   ixDeposit,
   joiningClosesTs,
+  ORE_DECIMALS,
   SKR_DECIMALS,
   SKR_MINT,
 } from '../../lib/lockedIn/program'
+import { COMPLETION_POINTS, joinedButton, TIER_NAME } from '../../lib/lockedIn/reward'
 import { cohortDayIndex, formatUtc, NBSP } from '../../lib/lockedIn/time'
 import { isFull } from '../../lib/lockedIn/visibility'
 import { isWalletCancel, sendWithWallet, TxError } from '../../lib/lockedIn/tx'
@@ -59,7 +63,7 @@ export default function LockedInScreen() {
   const key = typeof params.cohortId === 'string' ? params.cohortId : ''
   const { publicKey, connecting, restoring, session, signInError, connect, signIn, dataAddress, authorizeAndSign } = useWallet()
   const { cohort, loading } = useCohort(key)
-  const { joined, slot, seats, dayReps, refresh } = useLockedIn(cohort, dataAddress)
+  const { progress, joined, slot, seats, dayReps, refresh } = useLockedIn(cohort, dataAddress)
   const [now, setNow] = useState(() => Date.now())
   const [showOdds, setShowOdds] = useState(false)
   // 'reading' until the first answer; 'failed' leaves the check to the simulation before the wallet opens.
@@ -194,6 +198,38 @@ export default function LockedInScreen() {
   const deposit = formatAmount(cohort.depositAmount, SKR_DECIMALS)
   const realDays = cohort.daySeconds === 86_400
   const today = cohortDayIndex(cohort.startTs, cohort.daySeconds, now)
+  const started = now / 1000 >= cohort.startTs
+  const ended = now / 1000 >= cohort.endTs
+  const beforeDeadline = now / 1000 < cohort.deadlineTs
+  const deadline = formatUtc(cohort.deadlineTs)
+
+  // After joining: the chain's slot decides, and the server's record stands in until it has answered.
+  const success = slot ? hasFlag(slot, FLAG.SUCCESS) : progress?.success === true
+  const picked = slot ? hasFlag(slot, FLAG.PICKED) : typeof progress?.square === 'number'
+  const claimed = slot ? hasFlag(slot, FLAG.CLAIMED) : progress?.claimed === true
+  const tier = slot ? slot.tier : progress?.tier
+  const rewardAmount = slot ? slot.amount : progress?.amount !== undefined ? BigInt(progress.amount) : undefined
+  const nextStep = joined ? joinedButton({ success, picked, claimed, beforeDeadline }) : null
+
+  const statusTitle = success ? `All ${cohort.days} days done.` : ended ? 'Challenge ended.' : "You're in."
+  const statusNote = success
+    ? progress?.pointsAwarded ? `You earned ${COMPLETION_POINTS[cohort.kind] ?? 0} points.` : null
+    : ended ? null : 'Squats count while you are signed in.'
+  // Once a reward is earned (or can no longer be), one line about it replaces the explanation.
+  const rewardLine = !joined ? null
+    : claimed ? (tier !== undefined && rewardAmount !== undefined
+        ? `${TIER_NAME[tier] ?? 'Reward'}: ${formatAmount(rewardAmount, ORE_DECIMALS)} ORE received.`
+        : 'Reward received.')
+    : success && !beforeDeadline ? `This reward expired at${NBSP}${deadline}.`
+    : success && picked ? `Claim your reward by${NBSP}${deadline}, or it expires.`
+    : success ? `Pick a Square by${NBSP}${deadline}, or the reward expires.`
+    : ended ? `Not every day reached ${DAILY_TARGET} squats, so there is no Square to pick.`
+    : null
+  // Days in rows of up to four (a 3-Day challenge in one row).
+  const perRow = dayReps.length > 4 ? 4 : Math.max(dayReps.length, 1)
+  const dayRows = Array.from({ length: Math.ceil(dayReps.length / perRow) }, (_, r) =>
+    dayReps.slice(r * perRow, (r + 1) * perRow).map((reps, k) => ({ reps, i: r * perRow + k })),
+  )
 
   const button = joinButton({
     joined,
@@ -231,24 +267,25 @@ export default function LockedInScreen() {
 
         {joined && (
           <View style={s.card}>
-            <Text style={s.cardTitle}>{"You're in."}</Text>
-            {dayReps.map((reps, i) => {
-              const met = reps >= DAILY_TARGET
-              const isToday = i === today
-              return (
-                <View key={i} style={[s.dayRow, isToday && s.dayRowToday]}>
-                  <Text style={s.dayLabel}>{`Day ${i + 1}${isToday ? ' (today)' : ''}`}</Text>
-                  <Text style={[s.dayValue, met && { color: C.green }]}>
-                    {`${Math.min(reps, DAILY_TARGET)} / ${DAILY_TARGET}${met ? '  ✓' : ''}`}
-                  </Text>
-                </View>
-              )
-            })}
-            <Text style={s.note}>
-              {realDays
-                ? `Squats count while you are signed in. Day resets at${NBSP}15:00${NBSP}UTC.`
-                : `Squats count while you are signed in. Each day is ${Math.round(cohort.daySeconds / 60)} minutes.`}
-            </Text>
+            <Text style={s.cardTitle}>{statusTitle}</Text>
+            {dayRows.map((row, r) => (
+              <View key={r} style={s.dayRow}>
+                {row.map(({ reps, i }) => {
+                  const met = reps >= DAILY_TARGET
+                  return (
+                    <View key={i} style={[s.day, i === today && s.dayToday]}>
+                      <Text style={s.dayLabel}>{`Day ${i + 1}`}</Text>
+                      <Text style={[s.dayValue, met && { color: C.green }]}>
+                        {`${Math.min(reps, DAILY_TARGET)}/${DAILY_TARGET}${met ? ' ✓' : ''}`}
+                      </Text>
+                    </View>
+                  )
+                })}
+                {/* Keeps a short last row's cells the same width as the rows above. */}
+                {Array.from({ length: perRow - row.length }, (_, k) => <View key={`pad${k}`} style={s.dayPad} />)}
+              </View>
+            ))}
+            {statusNote && <Text style={s.note}>{statusNote}</Text>}
             {joinTx && (
               <TouchableOpacity onPress={() => Linking.openURL(`https://solscan.io/tx/${joinTx}`)} activeOpacity={0.7}>
                 <Text style={s.link}>View deposit on Solscan</Text>
@@ -265,18 +302,19 @@ export default function LockedInScreen() {
             value={`${DAILY_TARGET} squats a day for ${cohort.days} days`}
             note={realDays ? `Day resets at${NBSP}15:00${NBSP}UTC.` : `Each day is ${Math.round(cohort.daySeconds / 60)} minutes.`}
           />
-          <Term label="Starts" value={formatUtc(cohort.startTs)} />
-          <Term label="Joining closes" value={formatUtc(joiningClosesTs(cohort))} />
-          {cohort.capacity > 0 && <Term label="Joined" value={`${cohort.participants}/${cohort.capacity}`} />}
+          {/* Once in: only what still lies ahead, so the screen keeps to one page. */}
+          {!(joined && started) && <Term label="Starts" value={formatUtc(cohort.startTs)} />}
+          {!joined && <Term label="Joining closes" value={formatUtc(joiningClosesTs(cohort))} />}
+          {!joined && cohort.capacity > 0 && <Term label="Joined" value={`${cohort.participants}/${cohort.capacity}`} />}
           <Term label="Ends" value={formatUtc(cohort.endTs)} />
           <Term
             label="Withdraw"
             value={`From${NBSP}${formatUtc(cohort.endTs)}`}
-            note={`Returns automatically after${NBSP}${formatUtc(cohort.deadlineTs)}.`}
+            note={`Returns automatically after${NBSP}${deadline}.`}
             last
           />
-          <Text style={[s.lockNote, s.emphasis]}>Your SKR stays locked until the challenge ends.</Text>
-          <Text style={s.feeNote}>A small fee applies when you join.</Text>
+          {!ended && <Text style={[s.lockNote, s.emphasis]}>Your SKR stays locked until the challenge ends.</Text>}
+          {!joined && <Text style={s.feeNote}>A small fee applies when you join.</Text>}
         </View>
 
         <View style={s.card}>
@@ -286,14 +324,29 @@ export default function LockedInScreen() {
               <Text style={s.headLink}>ⓘ Reward odds</Text>
             </TouchableOpacity>
           </View>
-          <Text style={s.cardText}>
-            Finish every day to pick one Square on a 5×5 board.{' '}
-            <Text style={s.emphasis}>Every pick wins at least a Common Square.</Text>
-          </Text>
-          <Text style={[s.cardText, s.flush]}>
-            {`Pick your Square and claim your reward by${NBSP}${formatUtc(cohort.deadlineTs)}. After that, the reward expires.`}
-          </Text>
+          {rewardLine ? (
+            <Text style={[s.cardText, s.flush]}>{rewardLine}</Text>
+          ) : (
+            <>
+              <Text style={s.cardText}>
+                Finish every day to pick one Square on a 5×5 board.{' '}
+                <Text style={s.emphasis}>Every pick wins at least a Common Square.</Text>
+              </Text>
+              <Text style={[s.cardText, s.flush]}>
+                {`Pick your Square and claim your reward by${NBSP}${deadline}. After that, the reward expires.`}
+              </Text>
+            </>
+          )}
         </View>
+
+        {/* Once in: the way to the Square while a reward is still to pick or receive (lib/lockedIn/reward.ts). */}
+        {nextStep && (
+          <View style={s.joinBox}>
+            <TouchableOpacity style={s.btn} onPress={() => router.push(`/locked-in/square/${cohort.key}`)} activeOpacity={0.85}>
+              <Text style={s.btnText}>{nextStep.label}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* One button for every state (lib/lockedIn/joinButton.ts). A Join that fails says why in the popup. */}
         {button && (
@@ -389,10 +442,13 @@ const s = StyleSheet.create({
   emphasis:   { color: C.amber, fontWeight: '600' },
   feeNote:    { fontSize: 13, color: C.sub, marginTop: 4 },
 
-  dayRow:      { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: C.bg2, marginBottom: 6 },
-  dayRowToday: { backgroundColor: C.amberBg, borderWidth: 1.5, borderColor: `${C.amber}55` },
-  dayLabel:    { fontSize: 13, color: C.text, fontWeight: '600' },
-  dayValue:    { fontSize: 13, color: C.text, fontWeight: '800' },
+  dayRow:   { flexDirection: 'row', gap: 6, marginBottom: 6 },
+  // Every cell has a border (clear unless today), so today's is the same size as the others.
+  day:      { flex: 1, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, backgroundColor: C.bg2, borderWidth: 1.5, borderColor: 'transparent' },
+  dayToday: { backgroundColor: C.amberBg, borderColor: `${C.amber}55` },
+  dayPad:   { flex: 1 },
+  dayLabel: { fontSize: 12, color: C.sub, fontWeight: '600' },
+  dayValue: { fontSize: 15, color: C.text, fontWeight: '800', marginTop: 2 },
 
   joinBox: { marginTop: 4 },
   // A fixed height, so every state's button (label or spinner) is the same size as Join.

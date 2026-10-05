@@ -22,6 +22,7 @@ const u32le = (n: number) => {
 const pda = (seeds: Buffer[], program = PROGRAM_ID) => PublicKey.findProgramAddressSync(seeds, program)[0];
 
 export const configPda = () => pda([Buffer.from('config')]);
+export const rewardVaultPda = () => pda([Buffer.from('reward_vault')]);
 export const cohortPda = (kind: number, id: number) => pda([Buffer.from('cohort'), Buffer.from([kind]), u32le(id)]);
 export const skrVaultPda = (cohort: PublicKey) => pda([Buffer.from('skr_vault'), cohort.toBuffer()]);
 export const associatedTokenAddress = (owner: PublicKey, mint: PublicKey) =>
@@ -31,6 +32,8 @@ export const associatedTokenAddress = (owner: PublicKey, mint: PublicKey) =>
 
 const DISCRIMINATOR = {
   deposit: [242, 35, 198, 137, 82, 225, 242, 182],
+  pick_square: [114, 128, 92, 57, 222, 67, 183, 122],
+  claim_reward: [149, 95, 181, 242, 94, 90, 158, 162],
 } as const;
 
 const w = (pubkey: PublicKey, isSigner = false) => ({ pubkey, isSigner, isWritable: true });
@@ -55,6 +58,35 @@ export const ixDeposit = (user: PublicKey, kind: number, id: number, feeWallet: 
     data: Buffer.from(DISCRIMINATOR.deposit),
   });
 };
+
+/**
+ * Records the participant's Square (0-24). The program reads ORE's board itself and targets the
+ * round after the one on it, so the result can't be known when the pick lands.
+ */
+export const ixPickSquare = (user: PublicKey, kind: number, id: number, square: number) =>
+  new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [r(user, true), w(cohortPda(kind, id)), r(ORE_BOARD)],
+    data: Buffer.from([...DISCRIMINATOR.pick_square, square]),
+  });
+
+/** Pays a settled pick's reward from the reward vault; the program creates the user's ORE token account if needed. */
+export const ixClaimReward = (user: PublicKey, kind: number, id: number) =>
+  new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      w(user, true),
+      w(configPda()),
+      w(cohortPda(kind, id)),
+      w(rewardVaultPda()),
+      w(associatedTokenAddress(user, ORE_MINT)),
+      r(ORE_MINT),
+      r(TOKEN_PROGRAM_ID),
+      r(ASSOCIATED_TOKEN_PROGRAM_ID),
+      r(SystemProgram.programId),
+    ],
+    data: Buffer.from(DISCRIMINATOR.claim_reward),
+  });
 
 // ---- accounts -------------------------------------------------------------------------------------
 
@@ -153,6 +185,7 @@ export function decodeConfig(d: Buffer): ConfigState | null {
 
 export const FLAG = { OCCUPIED: 1, SUCCESS: 2, RETURNED: 4, PICKED: 8, SETTLED: 16, CLAIMED: 32 } as const;
 export const TIER = { NONE: 0, COMMON: 1, RARE: 2, LEGENDARY: 3 } as const;
+export const BOARD_SQUARES = 25;
 export const hasFlag = (s: Slot, f: number) => (s.flags & f) !== 0;
 /** Deposits are accepted before the start and during day one only. */
 export const joiningClosesTs = (c: { startTs: number; daySeconds: number }) => c.startTs + c.daySeconds;

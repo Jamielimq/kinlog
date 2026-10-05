@@ -8,8 +8,8 @@ const C = {
 // The only place in the app that shows odds (docs/LOCKED_IN.md, sections 2 and 8). Each "1 in N"
 // sits on its own line under the sentence.
 const ROWS = [
-  { tier: 'Legendary Square', odds: '0.2%', detail: 'The ORE round your pick targets hits the motherlode.\n(1 in 500)' },
-  { tier: 'Rare Square', odds: '4.0%', detail: "Your Square is that round's winning square.\n(1 in 25)" },
+  { tier: 'Legendary Square', odds: '0.2%', detail: 'The ORE round your pick targets hits the Motherlode.\n(1 in 500)' },
+  { tier: 'Rare Square', odds: '4.0%', detail: "Your Square is that round's winning Square.\n(1 in 25)" },
   { tier: 'Common Square', odds: '95.8%', detail: 'Every other pick.' },
 ]
 
@@ -27,7 +27,7 @@ export function OddsSheet({ visible, onClose }: { visible: boolean; onClose: () 
           </View>
         ))}
         <Text style={s.note}>
-          Every pick wins at least a Common Square. Each challenge has at most 1 Legendary and 3 Rare Squares.
+          Every pick wins at least a Common Square. Each challenge has at most one Legendary and three Rare Squares.
         </Text>
         <Text style={s.note}>
           Results come from <Text style={s.strong}>ORE mining rounds</Text>. Kinlog uses ORE&apos;s round rules

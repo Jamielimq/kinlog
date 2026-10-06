@@ -1,5 +1,6 @@
 import { getApp } from '@react-native-firebase/app'
 import { addDoc, collection, doc, getDoc, getFirestore, increment, setDoc } from '@react-native-firebase/firestore'
+import { useIsFocused } from '@react-navigation/native'
 import { Directory, File, Paths } from 'expo-file-system'
 import { useKeepAwake } from 'expo-keep-awake'
 import { useEffect, useRef, useState } from 'react'
@@ -15,6 +16,7 @@ const C = {
   bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
   dark: '#2D2926', amber: '#D97706', amber2: '#F59E0B',
   text: '#1C1917', muted: '#A8A29E', line: '#E7E5E4',
+  green: '#10B981', red: '#EF4444',
 }
 
 const POINTS_PER_REP = 5
@@ -52,6 +54,12 @@ const ORDER_TOLERANCE = 0.03
 
 // Snapshots go in a directory of our own so the sweep can never touch other cache files.
 const SNAPSHOT_DIR = 'kinlog-snapshots'
+// Before a session, how often to check whether a body is in frame (the Live / Not detected badge
+// and auto start). Slower than the session loop: nothing is counted here.
+const PREVIEW_INTERVAL_MS = 400
+// Auto start: how long a standing posture (knee at KNEE_UP or above) must hold in frame before a
+// session starts on its own. 0 starts on the first standing frame.
+const AUTO_START_HOLD_MS = 0
 
 function getTodayStart() {
   const d = new Date(); d.setHours(0,0,0,0); return d.getTime()
@@ -347,6 +355,10 @@ export default function WorkoutScreen() {
   const device = useCameraDevice('front')
   const [isActive, setIsActive] = useState(false)
   const [trackingLost, setTrackingLost] = useState(false)
+  // For the Live / Not detected badge only, never for judgement: whether the session's frames show a
+  // body, set at the same moments as trackingLost. null until the session's first verdict, when the
+  // badge keeps what it showed before Start (so an empty frame reads Not detected from the start).
+  const [sessionDetected, setSessionDetected] = useState<boolean | null>(null)
   const [reps, setReps] = useState(0)
   const [phase, setPhase] = useState<'up' | 'down'>('up')
   const [angle, setAngle] = useState(180)
@@ -520,7 +532,10 @@ export default function WorkoutScreen() {
           // Phase is deliberately preserved — tracking can drop mid-squat. There is no
           // filter buffer or streak left to invalidate, so a gap simply skips a frame.
           if (lostSinceRef.current === null) lostSinceRef.current = now
-          if (now - lostSinceRef.current >= TRACKING_WARN_MS) setTrackingLost(true)
+          if (now - lostSinceRef.current >= TRACKING_WARN_MS) {
+            setTrackingLost(true)
+            setSessionDetected(false)
+          }
           // setAngle is not called, so the readout holds its last measured value.
           logPoseFrame(poseStatsRef.current, dt, stages, measured, phaseRef.current, null, null, reject)
           return
@@ -528,6 +543,7 @@ export default function WorkoutScreen() {
 
         lostSinceRef.current = null
         setTrackingLost(false)
+        setSessionDetected(true)
 
         const val = measured!.angle
         setAngle(val)
@@ -622,6 +638,74 @@ export default function WorkoutScreen() {
     return () => clearInterval(interval)
   }, [isActive, poseReady])
 
+  // Before a session: is a body in frame? Feeds the Live / Not detected badge and auto start. It
+  // uses the session's acceptance test (a pose, every measured joint at MIN_VISIBILITY or above,
+  // joints in a plausible order) and its 1 s grace before calling tracking lost, but touches none
+  // of the counting or judgement state, and shares detectingRef so it never overlaps a session frame.
+  const isFocused = useIsFocused()
+  const [previewDetected, setPreviewDetected] = useState(false)
+  // Auto start runs whenever Start itself would start a session now: no sign-in pending, and no
+  // save under way or result window open. So a finished session doesn't restart while its result is
+  // showing, and does as soon as the window is closed (straight away when there is none, as at 0
+  // reps). Start always works by hand.
+  const canAutoStart = !needsSignIn && !saving && !workoutResult
+  const canAutoStartRef = useRef(canAutoStart)
+  useEffect(() => {
+    canAutoStartRef.current = canAutoStart
+  }, [canAutoStart])
+  // Kept current after every render (below), so auto start always calls this render's startSession.
+  const startSessionRef = useRef<() => void>(() => {})
+  useEffect(() => {
+    if (isActive || !poseReady || !isFocused) return
+    let lostSince: number | null = null
+    let standingSince: number | null = null
+    let started = false
+
+    const interval = setInterval(async () => {
+      if (started || detectingRef.current || isActiveRef.current || !cameraRef.current) return
+      detectingRef.current = true
+      let snapshotPath: string | null = null
+      try {
+        const dir = snapshotDirRef.current
+        const photo = await cameraRef.current.takeSnapshot(dir ? { quality: 30, path: dir } : { quality: 30 })
+        if (!photo?.path) return
+        snapshotPath = photo.path
+        const landmarks = await detect('file://' + photo.path)
+        const measured = landmarks ? measureSide(landmarks) : null
+        const now = Date.now()
+        if (measured && measured.minVis >= MIN_VISIBILITY && jointsPlausible(measured)) {
+          lostSince = null
+          setPreviewDetected(true)
+          if (measured.angle >= KNEE_UP) {
+            if (standingSince === null) standingSince = now
+            if (canAutoStartRef.current && now - standingSince >= AUTO_START_HOLD_MS) {
+              started = true
+              // The latest startSession, not the one from when this loop began.
+              startSessionRef.current()
+            }
+          } else {
+            standingSince = null
+          }
+        } else {
+          standingSince = null
+          if (lostSince === null) lostSince = now
+          if (now - lostSince >= TRACKING_WARN_MS) setPreviewDetected(false)
+        }
+      } catch {
+        // A failed snapshot only skips this check.
+      } finally {
+        if (snapshotPath) {
+          try { new File('file://' + snapshotPath).delete() } catch {}
+        }
+        detectingRef.current = false
+      }
+    }, PREVIEW_INTERVAL_MS)
+
+    return () => clearInterval(interval)
+    // detect only changes when the landmarker's initialization changes, which poseReady tracks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive, poseReady, isFocused])
+
   // --- POSE DEBUG (calibration only - remove with the debug block) ---
   // Moves the deepest frame of the rep just counted into the external debug dir and
   // logs the landmarks that produced its angle, so the number can be checked against
@@ -676,6 +760,7 @@ export default function WorkoutScreen() {
     repsRef.current = 0; elapsedRef.current = 0; phaseRef.current = 'up'
     resetJudgement()
     setIsActive(true); setReps(0); setElapsed(0); setPhase('up'); setAngle(180)
+    setSessionDetected(null)
     startedAtRef.current = Date.now()
     timerRef.current = setInterval(() => {
       elapsedRef.current = Math.floor((Date.now() - startedAtRef.current) / 1000)
@@ -683,6 +768,7 @@ export default function WorkoutScreen() {
     }, 1000)
   }
 
+  // Nothing is saved: the count is dropped, and a standing user starts a fresh session.
   const resetSession = () => {
     isActiveRef.current = false
     setIsActive(false)
@@ -691,6 +777,10 @@ export default function WorkoutScreen() {
     resetJudgement()
     setReps(0); setElapsed(0); setAngle(180); setPhase('up')
   }
+
+  useEffect(() => {
+    startSessionRef.current = startSession
+  })
 
   const formatTime = (sec: number) =>
     `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`
@@ -716,6 +806,16 @@ export default function WorkoutScreen() {
   }
 
   const progress = reps / TARGET
+  // During a session the badge follows the session's frames (lost after 1 s of excluded frames, the
+  // same moment the Step back hint appears); until the first verdict it keeps the pre-start value.
+  const detected = isActive ? (sessionDetected ?? previewDetected) : previewDetected
+  // Text arrows and a text-style warning sign (U+FE0E), so the icon takes the pill's amber color
+  // like the side-view arrow instead of rendering as a color emoji.
+  const guide =
+    !isActive ? { icon: '↔', text: 'Stand sideways to the camera' }
+    : trackingLost ? { icon: '⚠︎', text: 'Step back so your full body is in frame' }
+    : phase === 'down' ? { icon: '↑', text: 'Come up slowly' }
+    : { icon: '↓', text: 'Go down to 110° or below' }
 
   return (
     <View style={s.container}>
@@ -728,38 +828,29 @@ export default function WorkoutScreen() {
           photo={true}
         />
 
-        {/* Live indicator */}
-        {isActive && (
-          <View style={s.liveBadge}><View style={s.liveDot}/><Text style={s.liveText}>LIVE</Text></View>
-        )}
-
-        {/* Phase guidance */}
-        {isActive && (
-          <View style={s.phaseBadge}>
-            <Text style={s.phaseText}>
-              {trackingLost
-                ? '⚠  Step back so your full body is in frame'
-                : phase === 'down' ? '⬆  Come up slowly' : '⬇  Go down to 110° or below'}
+        {/* One guidance pill: side view before a session (required, not a choice), then what to do
+            during one. Kept to one line; a long hint shrinks its text slightly rather than wrap. */}
+        <View style={s.modeHint}>
+          <View style={s.modeHintBox}>
+            <Text style={s.modeHintIcon}>{guide.icon}</Text>
+            <Text style={s.modeHintText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              {guide.text}
             </Text>
           </View>
-        )}
+        </View>
 
-        {/* Side view is required, not a choice - hidden during active session */}
-        {!isActive && (
-          <View style={s.modeHint}>
-            <Text style={s.modeHintLabel}>CAMERA POSITION</Text>
-            <View style={s.modeHintBox}>
-              <Text style={s.modeHintIcon}>↔</Text>
-              <Text style={s.modeHintText}>Stand sideways to the camera</Text>
-            </View>
+        {/* Bottom row: whether a body is in frame on the left, the knee angle on the right, bottom
+            edges aligned */}
+        <View style={s.bottomRow}>
+          <View style={s.detectBadge}>
+            <View style={[s.detectDot, { backgroundColor: detected ? C.green : C.red }]}/>
+            <Text style={s.detectText}>{detected ? 'Live' : 'Not detected'}</Text>
           </View>
-        )}
-
-        {/* Knee angle display */}
-        <View style={s.angleBadge}>
-          <Text style={s.angleLabel}>KNEE ANGLE</Text>
-          <Text style={s.angleValue}>{angle}°</Text>
-          <Text style={s.angleTarget}>TARGET ≤ 110°</Text>
+          <View style={s.angleBadge}>
+            <Text style={s.angleLabel}>KNEE ANGLE</Text>
+            <Text style={s.angleValue}>{angle}°</Text>
+            <Text style={s.angleTarget}>TARGET ≤ 110°</Text>
+          </View>
         </View>
       </View>
 
@@ -789,9 +880,9 @@ export default function WorkoutScreen() {
             onPress={isActive ? stopSession : needsSignIn ? signIn : startSession}
             disabled={saving || (!isActive && needsSignIn && !(awaitingSignIn && session === 'needed'))}
           >
-            <Text style={s.btnPrimaryText}>
+            <Text style={[s.btnPrimaryText, isActive && s.btnStopText]}>
               {saving ? 'Saving...'
-                : isActive ? '⏸  Pause'
+                : isActive ? 'Finish'
                 : !needsSignIn ? '▶  Start'
                 : session === 'checking' ? 'Checking...'
                 : !awaitingSignIn ? 'Connecting...'
@@ -799,10 +890,8 @@ export default function WorkoutScreen() {
                 : 'Sign in'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.btnSecondary}>
-            <Text style={s.btnSecondaryText}>Goal</Text>
-          </TouchableOpacity>
         </View>
+        {!isActive && canAutoStart && <Text style={s.autoHint}>Starts when you stand in frame</Text>}
 
         {!publicKey && <Text style={s.noWalletNote}>⚠ Connect wallet to save workouts</Text>}
         {awaitingSignIn && !isActive && (
@@ -866,25 +955,26 @@ const s = StyleSheet.create({
   cameraContainer: { flex: 1, position: 'relative' },
   camera: { flex: 1 },
 
-  liveBadge: { position: 'absolute', top: 56, left: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#EF4444', marginRight: 6 },
-  liveText: { color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
+  // The camera's bottom corners: detection badge left, knee angle box right, bottom edges aligned.
+  bottomRow:   { position: 'absolute', left: 16, right: 16, bottom: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  detectBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 100 },
+  detectDot:   { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+  detectText:  { color: '#fff', fontSize: 12, fontWeight: '800' },
 
-  phaseBadge: { position: 'absolute', top: 56, left: '15%', right: '15%', backgroundColor: 'rgba(217,119,6,0.2)', borderWidth: 1, borderColor: 'rgba(217,119,6,0.5)', paddingVertical: 7, borderRadius: 100, alignItems: 'center' },
-  phaseText: { color: C.amber2, fontSize: 16, fontWeight: '700' },
 
   modeHint:      { position: 'absolute', top: 56, left: 16, right: 16, alignItems: 'center' },
-  modeHintLabel: { fontSize: 9, color: 'rgba(255,255,255,0.5)', letterSpacing: 1.5, marginBottom: 8 },
   modeHintBox:   { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,0,0,0.45)', borderWidth: 1, borderColor: 'rgba(217,119,6,0.5)', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 16 },
   modeHintIcon:  { fontSize: 18, color: C.amber2 },
-  modeHintText:  { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
+  // flexShrink lets a long hint fit the screen width (and shrink its text) instead of overflowing.
+  modeHintText:  { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.85)', flexShrink: 1 },
 
-  angleBadge:  { position: 'absolute', bottom: 20, right: 16, backgroundColor: 'rgba(0,0,0,0.65)', borderWidth: 1, borderColor: 'rgba(217,119,6,0.35)', borderRadius: 14, padding: 12, alignItems: 'center' },
+  angleBadge:  { backgroundColor: 'rgba(0,0,0,0.65)', borderWidth: 1, borderColor: 'rgba(217,119,6,0.35)', borderRadius: 14, padding: 12, alignItems: 'center' },
   angleLabel:  { color: 'rgba(255,255,255,0.35)', fontSize: 8, letterSpacing: 1, marginBottom: 2 },
   angleValue:  { color: C.amber2, fontSize: 28, fontWeight: '900', lineHeight: 30 },
   angleTarget: { color: 'rgba(255,255,255,0.25)', fontSize: 8, marginTop: 2 },
 
-  panel:        { backgroundColor: C.bg, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 32 },
+  // A small bottom padding: the camera above (flex: 1) takes the rest of the height.
+  panel:        { backgroundColor: C.bg, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 22 },
   repRow:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   repCount:     { fontSize: 64, fontWeight: '900', color: C.text, lineHeight: 64 },
   repLabel:     { fontSize: 10, color: C.muted, letterSpacing: 2, marginTop: 2 },
@@ -900,10 +990,13 @@ const s = StyleSheet.create({
   btnPrimary:      { flex: 1.4, backgroundColor: C.dark, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
   btnStop:         { backgroundColor: '#EF4444' },
   btnPrimaryText:  { color: C.amber2, fontSize: 15, fontWeight: '700' },
+  // White on the red Finish button, which amber didn't read well against.
+  btnStopText:     { color: '#fff' },
   btnSecondary:    { flex: 1, backgroundColor: C.bg2, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, borderColor: C.line },
   btnSecondaryText:{ color: C.text, fontSize: 14, fontWeight: '600' },
 
   noWalletNote: { textAlign: 'center', color: C.muted, fontSize: 11, marginTop: 12 },
+  autoHint:     { textAlign: 'center', color: C.text, fontSize: 13, fontWeight: '600', marginTop: 10 },
   videoNote:    { textAlign: 'center', color: C.muted, fontSize: 14, marginTop: 8 },
 
   permSafe:    { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg, padding: 32 },

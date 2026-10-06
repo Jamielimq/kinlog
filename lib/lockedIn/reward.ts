@@ -95,16 +95,16 @@ export function squareButton(s: SquareState): SquareButton | null {
 
 type Alert = { title: string; body: string };
 
-/** Wording shared with the join screen's alert for the ways a transaction fails before the program runs. */
-function txFailure(e: TxError): string | null {
+/** Wording shared with the join and withdraw alerts for the ways a transaction fails before the program runs. */
+export function txFailure(e: TxError): string | null {
   if (e.kind === 'network') return "Couldn't reach the network, so nothing was sent. Try again.";
   if (e.kind === 'wallet') return "Your wallet couldn't complete the request. Try again.";
   if (e.kind === 'expired') return "It timed out before going through, so nothing changed. Try again.";
   return null;
 }
 
-/** Not enough SOL for the network fee, or, for a claim, for the new ORE token account. */
-function solShort(e: TxError): boolean {
+/** Not enough SOL for the network fee, or for a new token account (a claim's ORE, a withdrawal's SKR). */
+export function solShort(e: TxError): boolean {
   if (e.reason === 'InsufficientFundsForRent' || e.reason === 'InsufficientFundsForFee' || e.reason === 'AccountNotFound') return true;
   return e.code === 1 && e.logs.some(l => l.toLowerCase().includes('insufficient lamports'));
 }

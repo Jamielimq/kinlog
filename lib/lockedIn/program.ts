@@ -34,6 +34,7 @@ const DISCRIMINATOR = {
   deposit: [242, 35, 198, 137, 82, 225, 242, 182],
   pick_square: [114, 128, 92, 57, 222, 67, 183, 122],
   claim_reward: [149, 95, 181, 242, 94, 90, 158, 162],
+  withdraw: [183, 18, 70, 156, 148, 109, 161, 34],
 } as const;
 
 const w = (pubkey: PublicKey, isSigner = false) => ({ pubkey, isSigner, isWritable: true });
@@ -86,6 +87,42 @@ export const ixClaimReward = (user: PublicKey, kind: number, id: number) =>
       r(SystemProgram.programId),
     ],
     data: Buffer.from(DISCRIMINATOR.claim_reward),
+  });
+
+/** Takes the deposit back once the cohort has ended, into the depositor's own SKR token account. */
+export const ixWithdraw = (user: PublicKey, kind: number, id: number) => {
+  const cohort = cohortPda(kind, id);
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      r(user, true),
+      w(cohort),
+      w(skrVaultPda(cohort)),
+      w(associatedTokenAddress(user, SKR_MINT)),
+      r(SKR_MINT),
+      r(TOKEN_PROGRAM_ID),
+    ],
+    data: Buffer.from(DISCRIMINATOR.withdraw),
+  });
+};
+
+/**
+ * The owner's associated token account for a mint: created if missing, nothing if it exists (the
+ * associated token program's CreateIdempotent, not an Anchor instruction). Sent before a withdrawal,
+ * which needs the SKR account and fails if the wallet has closed it.
+ */
+export const ixCreateAtaIdempotent = (payer: PublicKey, owner: PublicKey, mint: PublicKey) =>
+  new TransactionInstruction({
+    programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+    keys: [
+      w(payer, true),
+      w(associatedTokenAddress(owner, mint)),
+      r(owner),
+      r(mint),
+      r(SystemProgram.programId),
+      r(TOKEN_PROGRAM_ID),
+    ],
+    data: Buffer.from([1]),
   });
 
 // ---- accounts -------------------------------------------------------------------------------------

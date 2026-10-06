@@ -17,7 +17,9 @@ import {
   FLAG,
   formatAmount,
   hasFlag,
+  ixCreateAtaIdempotent,
   ixDeposit,
+  ixWithdraw,
   joiningClosesTs,
   ORE_DECIMALS,
   SKR_DECIMALS,
@@ -27,6 +29,7 @@ import { COMPLETION_POINTS, joinedButton, TIER_NAME } from '../../lib/lockedIn/r
 import { cohortDayIndex, formatUtc, NBSP } from '../../lib/lockedIn/time'
 import { isFull } from '../../lib/lockedIn/visibility'
 import { isWalletCancel, sendWithWallet, TxError } from '../../lib/lockedIn/tx'
+import { backInWallet, withdrawButton, withdrawErrorAlert } from '../../lib/lockedIn/withdraw'
 import { getConnection } from '../../lib/solana'
 
 const C = {
@@ -71,6 +74,8 @@ export default function LockedInScreen() {
   const [balanceReads, setBalanceReads] = useState(0)
   const [joining, setJoining] = useState(false)
   const [joinTx, setJoinTx] = useState<string | null>(null)
+  const [withdrawing, setWithdrawing] = useState(false)
+  const [withdrawTx, setWithdrawTx] = useState<string | null>(null)
   // The program said joining has closed; its clock can be ahead of this phone's.
   const [closedOnChain, setClosedOnChain] = useState(false)
   // The screen's popup: the Join confirm, or a notice after a Join or sign-in. Its content stays
@@ -175,12 +180,45 @@ export default function LockedInScreen() {
     // The fee amount is left to the wallet's approval screen, which shows it.
     showPopup({
       title: `Join the ${cohort.days}-Day Challenge?`,
-      message: `${deposit} SKR stays locked until${NBSP}${formatUtc(cohort.endTs)}. After that, you can withdraw it, pass or fail.`,
+      message: `${deposit} SKR stays locked until${NBSP}${formatUtc(cohort.endTs)}. After that, you can withdraw it, pass or${NBSP}fail.`,
       actions: [
         { label: 'Cancel' },
         { label: 'Join', primary: true, onPress: () => void join() },
       ],
     })
+  }
+
+  /** After a withdrawal that didn't go through: as after a Join, the chain decides first. */
+  const afterWithdrawError = async (e: unknown, opensAt: string) => {
+    console.log('Withdraw failed:', (e as any)?.message ?? e)
+    if (isWalletCancel(e)) return
+    const fresh = await refresh()
+    if (fresh && hasFlag(fresh, FLAG.RETURNED)) return
+    const { title, body } = withdrawErrorAlert(e, opensAt)
+    showPopup({ title, message: body, actions: OK_ONLY })
+  }
+
+  /**
+   * Takes the deposit back, with no popup first: the wallet's approval screen confirms it. The SKR
+   * account is created in the same transaction if the wallet has closed it.
+   */
+  const withdraw = async () => {
+    if (!publicKey || !cohort) return
+    setWithdrawing(true)
+    try {
+      const sig = await sendWithWallet({
+        connection: getConnection(),
+        payer: publicKey,
+        instructions: [ixCreateAtaIdempotent(publicKey, publicKey, SKR_MINT), ixWithdraw(publicKey, cohort.kind, cohort.id)],
+        authorizeAndSign,
+      })
+      setWithdrawTx(sig)
+      await refresh()
+    } catch (e) {
+      await afterWithdrawError(e, formatUtc(cohort.endTs))
+    } finally {
+      setWithdrawing(false)
+    }
   }
 
   if (loading || !cohort) {
@@ -206,23 +244,28 @@ export default function LockedInScreen() {
   const success = slot ? hasFlag(slot, FLAG.SUCCESS) : progress?.success === true
   const picked = slot ? hasFlag(slot, FLAG.PICKED) : typeof progress?.square === 'number'
   const claimed = slot ? hasFlag(slot, FLAG.CLAIMED) : progress?.claimed === true
+  const returned = slot ? hasFlag(slot, FLAG.RETURNED) : progress?.returned === true
   const tier = slot ? slot.tier : progress?.tier
   const rewardAmount = slot ? slot.amount : progress?.amount !== undefined ? BigInt(progress.amount) : undefined
   const nextStep = joined ? joinedButton({ success, picked, claimed, beforeDeadline }) : null
+  const withdrawBtn = joined ? withdrawButton({ ended, onChain: !!slot, returned, busy: withdrawing, deposit }) : null
+  const openSquare = () => router.push(`/locked-in/square/${cohort.key}`)
 
   const statusTitle = success ? `All ${cohort.days} days done.` : ended ? 'Challenge ended.' : "You're in."
   const statusNote = success
     ? progress?.pointsAwarded ? `You earned ${COMPLETION_POINTS[cohort.kind] ?? 0} points.` : null
     : ended ? null : 'Squats count while you are signed in.'
+  // Once received: the result in bold, with the way back to the Square under it.
+  const receivedLine = !joined || !claimed ? null
+    : tier !== undefined && rewardAmount !== undefined
+      ? `${TIER_NAME[tier] ?? 'Reward'}, ${formatAmount(rewardAmount, ORE_DECIMALS)} ORE received`
+      : 'Reward received'
   // Once a reward is earned (or can no longer be), one line about it replaces the explanation.
-  const rewardLine = !joined ? null
-    : claimed ? (tier !== undefined && rewardAmount !== undefined
-        ? `${TIER_NAME[tier] ?? 'Reward'}: ${formatAmount(rewardAmount, ORE_DECIMALS)} ORE received.`
-        : 'Reward received.')
+  const rewardLine = !joined || claimed ? null
     : success && !beforeDeadline ? `This reward expired at${NBSP}${deadline}.`
-    : success && picked ? `Claim your reward by${NBSP}${deadline}, or it expires.`
-    : success ? `Pick a Square by${NBSP}${deadline}, or the reward expires.`
-    : ended ? `Not every day reached ${DAILY_TARGET} squats, so there is no Square to pick.`
+    : success && picked ? `Claim your reward by${NBSP}${deadline}, or it${NBSP}expires.`
+    : success ? `Pick a Square by${NBSP}${deadline}, or the reward${NBSP}expires.`
+    : ended ? `Not every day reached ${DAILY_TARGET} squats, so there is no Square to${NBSP}pick.`
     : null
   // Days in rows of up to four (a 3-Day challenge in one row).
   const perRow = dayReps.length > 4 ? 4 : Math.max(dayReps.length, 1)
@@ -285,9 +328,16 @@ export default function LockedInScreen() {
               </View>
             ))}
             {statusNote && <Text style={s.note}>{statusNote}</Text>}
+            {/* Without "All done." while a reward is still to pick or receive (lib/lockedIn/withdraw.ts). */}
+            {returned && <Text style={s.note}>{`${backInWallet(deposit, success && !claimed)}.`}</Text>}
             {joinTx && (
               <TouchableOpacity onPress={() => Linking.openURL(`https://solscan.io/tx/${joinTx}`)} activeOpacity={0.7}>
                 <Text style={s.link}>View deposit on Solscan</Text>
+              </TouchableOpacity>
+            )}
+            {withdrawTx && (
+              <TouchableOpacity onPress={() => Linking.openURL(`https://solscan.io/tx/${withdrawTx}`)} activeOpacity={0.7}>
+                <Text style={s.link}>View withdrawal on Solscan</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -306,12 +356,16 @@ export default function LockedInScreen() {
           {!joined && <Term label="Joining closes" value={formatUtc(joiningClosesTs(cohort))} />}
           {!joined && cohort.capacity > 0 && <Term label="Joined" value={`${cohort.participants}/${cohort.capacity}`} />}
           <Term label="Ends" value={formatUtc(cohort.endTs)} />
-          <Term
-            label="Withdraw"
-            value={`From${NBSP}${formatUtc(cohort.endTs)}`}
-            note={`Returns automatically after${NBSP}${deadline}.`}
-            last
-          />
+          {returned ? (
+            <Term label="Withdraw" value="Returned" last />
+          ) : (
+            <Term
+              label="Withdraw"
+              value={`From${NBSP}${formatUtc(cohort.endTs)}`}
+              note={`Returns automatically after${NBSP}${deadline}.`}
+              last
+            />
+          )}
           {!ended && <Text style={[s.lockNote, s.emphasis]}>Your SKR stays locked until the challenge ends.</Text>}
           {!joined && <Text style={s.feeNote}>A small fee applies when you join.</Text>}
         </View>
@@ -323,16 +377,26 @@ export default function LockedInScreen() {
               <Text style={s.headLink}>ⓘ Reward odds</Text>
             </TouchableOpacity>
           </View>
-          {rewardLine ? (
+          {receivedLine ? (
+            <>
+              <Text style={s.received}>{receivedLine}</Text>
+              {/* While the chain has the slot, which the Square screen reads; it goes when the cohort closes. */}
+              {slot && (
+                <TouchableOpacity style={s.squareLinkBox} onPress={openSquare} activeOpacity={0.7} hitSlop={8}>
+                  <Text style={s.squareLink}>{`See your Square${NBSP}›`}</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : rewardLine ? (
             <Text style={[s.cardText, s.flush]}>{rewardLine}</Text>
           ) : (
             <>
               <Text style={s.cardText}>
                 Finish every day to pick one Square on a 5×5 board.{' '}
-                <Text style={s.emphasis}>Every pick wins at least a Common Square.</Text>
+                <Text style={s.emphasis}>{`Every pick wins at least a Common${NBSP}Square.`}</Text>
               </Text>
               <Text style={[s.cardText, s.flush]}>
-                {`Pick your Square and claim your reward by${NBSP}${deadline}. After that, the reward expires.`}
+                {`Pick your Square and claim your reward by${NBSP}${deadline}. After that, the reward${NBSP}expires.`}
               </Text>
             </>
           )}
@@ -341,8 +405,23 @@ export default function LockedInScreen() {
         {/* Once in: the way to the Square while a reward is still to pick or receive (lib/lockedIn/reward.ts). */}
         {nextStep && (
           <View style={s.joinBox}>
-            <TouchableOpacity style={s.btn} onPress={() => router.push(`/locked-in/square/${cohort.key}`)} activeOpacity={0.85}>
+            <TouchableOpacity style={s.btn} onPress={openSquare} activeOpacity={0.85}>
               <Text style={s.btnText}>{nextStep.label}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* After the end, below the Square's: a reward expires at the deadline, while the deposit is
+            returned automatically after it (lib/lockedIn/withdraw.ts). */}
+        {withdrawBtn && (
+          <View style={[s.joinBox, nextStep && s.joinBoxNext]}>
+            <TouchableOpacity
+              style={s.btn}
+              onPress={withdrawBtn.label ? () => void withdraw() : undefined}
+              disabled={!withdrawBtn.label}
+              activeOpacity={0.85}
+            >
+              {withdrawBtn.label ? <Text style={s.btnText}>{withdrawBtn.label}</Text> : <ActivityIndicator color="#fff" />}
             </TouchableOpacity>
           </View>
         )}
@@ -428,6 +507,10 @@ const s = StyleSheet.create({
   note:      { fontSize: 12, color: C.sub, lineHeight: 17, marginTop: 10 },
   link:      { fontSize: 13, color: C.amber, fontWeight: '700', marginTop: 8 },
   headLink:  { fontSize: 13, color: C.amber, fontWeight: '700' },
+  // Once received: the result in bold, and under it a small way back to the Square in the card's grey.
+  received:      { fontSize: 15, color: C.text, fontWeight: '800' },
+  squareLinkBox: { alignSelf: 'flex-start', marginTop: 6 },
+  squareLink:    { fontSize: 13, color: C.sub, fontWeight: '700' },
 
   term:       { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, gap: 12 },
   termBorder: { borderBottomWidth: 1, borderBottomColor: C.line },
@@ -449,7 +532,8 @@ const s = StyleSheet.create({
   dayLabel: { fontSize: 12, color: C.sub, fontWeight: '600' },
   dayValue: { fontSize: 15, color: C.text, fontWeight: '800', marginTop: 2 },
 
-  joinBox: { marginTop: 4 },
+  joinBox:     { marginTop: 4 },
+  joinBoxNext: { marginTop: 10 },
   // A fixed height, so every state's button (label or spinner) is the same size as Join.
   btn:         { backgroundColor: C.dark, borderRadius: 14, height: 52, alignItems: 'center', justifyContent: 'center' },
   btnGrey:     { backgroundColor: C.line },

@@ -14,7 +14,8 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
  * A space that never breaks a line. Copy puts it between a date and the short word before it
- * ("after Oct 11"), so the two always land on the same line.
+ * ("after Oct 11"), so the two always land on the same line, and between the last two words of a
+ * sentence that wraps ("or it expires."), so a line never holds one word on its own.
  */
 export const NBSP = ' ';
 

@@ -34,7 +34,6 @@ const C = {
   card: '#FFFFFF', dark: '#2D2926',
   amber: '#D97706', amber2: '#F59E0B', amberBg: '#FFFBEB',
   text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
-  green: '#10B981',
 }
 
 const DAILY_TARGET = 30
@@ -275,7 +274,7 @@ export default function LockedInScreen() {
                   return (
                     <View key={i} style={[s.day, i === today && s.dayToday]}>
                       <Text style={s.dayLabel}>{`Day ${i + 1}`}</Text>
-                      <Text style={[s.dayValue, met && { color: C.green }]}>
+                      <Text style={[s.dayValue, met && { color: C.amber2 }]}>
                         {`${Math.min(reps, DAILY_TARGET)}/${DAILY_TARGET}${met ? ' ✓' : ''}`}
                       </Text>
                     </View>

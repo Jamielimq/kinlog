@@ -59,6 +59,8 @@ export function MonthlyBadgeGrid({ month, items, streak, onClaim }: {
                 disabled={!pressable}
                 activeOpacity={0.8}
               >
+                {/* The points it gives when claimed: fixed, so shown even while loading. */}
+                <Text style={[s.pts, !lit && s.ptsOff]}>{`+${badge.pts}`}</Text>
                 <MonthlyMedal badge={badge} lit={lit} claimed={state === 'claimed'} />
                 <Text style={[s.name, !lit && s.nameOff]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
                   {badge.name}
@@ -93,6 +95,9 @@ const s = StyleSheet.create({
 
   row:  { flexDirection: 'row', gap: 8, marginBottom: 8 },
   tile: { flex: 1, alignItems: 'center', paddingTop: 12, paddingBottom: 10, paddingHorizontal: 6, borderRadius: 16, backgroundColor: C.bg2 },
+  // In the tile's top right corner, clear of the medal ("+300" included), so nothing else moves.
+  pts:    { position: 'absolute', top: 6, right: 8, fontSize: 11, fontWeight: '700', color: C.sub },
+  ptsOff: { color: C.muted },
   name:    { fontSize: 12, fontWeight: '800', color: C.text, marginTop: 8 },
   nameOff: { color: C.muted },
   // One line each, the same height, so a row's tiles line up whatever their state.

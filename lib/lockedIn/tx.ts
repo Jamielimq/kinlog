@@ -101,12 +101,17 @@ async function confirm(connection: Connection, signature: string, lastValidBlock
 
 type AuthorizeAndSign = (callback: (wallet: any, authToken: string) => Promise<void>) => Promise<void>;
 
-/** Simulates, has the wallet sign and send, and waits for confirmation. Returns the signature. */
+/**
+ * Simulates, has the wallet sign and send, and waits for confirmation. Returns the signature. onSent,
+ * if given, gets the signature as soon as the wallet has sent the transaction, before confirmation,
+ * so a caller can keep it in case the outcome isn't known here (its own failure is only logged).
+ */
 export async function sendWithWallet(opts: {
   connection: Connection;
   payer: PublicKey;
   instructions: TransactionInstruction[];
   authorizeAndSign: AuthorizeAndSign;
+  onSent?: (signature: string, lastValidBlockHeight: number) => Promise<void> | void;
 }): Promise<string> {
   const { connection, payer, instructions } = opts;
   const { unitsConsumed } = await simulate(connection, payer, instructions);
@@ -129,6 +134,14 @@ export async function sendWithWallet(opts: {
       const tx = new Transaction({ feePayer: payer, recentBlockhash: latest.blockhash }).add(...budget, ...instructions);
       const signatures: string[] = await wallet.signAndSendTransactions({ transactions: [tx] });
       signature = signatures[0];
+      // Inside the wallet session, before anything else can fail.
+      if (signature && opts.onSent) {
+        try {
+          await opts.onSent(signature, lastValidBlockHeight);
+        } catch (e) {
+          console.log('onSent failed:', messageOf(e));
+        }
+      }
     });
   } catch (e) {
     // A cancel passes through unchanged (the caller shows nothing); anything else the wallet raised

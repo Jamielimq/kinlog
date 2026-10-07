@@ -1,30 +1,157 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useRef, useState } from 'react'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Popup, type PopupAction } from '../../components/Popup'
+import { MonthCalendar } from '../../components/record/MonthCalendar'
+import { MonthlyBadgeGrid, type MonthlyBadgeItem, type MonthlyBadgeState } from '../../components/record/MonthlyBadgeGrid'
 import { SignInGate } from '../../components/SignInGate'
 import { useWallet } from '../../context/WalletContext'
-import { useGoals } from '../../hooks/useGoals'
+import { useMonthlyBadges } from '../../hooks/useMonthlyBadges'
+import { useWorkoutDays } from '../../hooks/useWorkoutDays'
+import { badgeClaimAlert, claimInstructions } from '../../lib/badgeClaim'
+import { isWalletCancel, sendWithWallet, TxError } from '../../lib/lockedIn/tx'
+import type { PendingClaim } from '../../lib/pendingClaims'
+import {
+  addMonths,
+  claimMemo,
+  goalDays,
+  monthlyBadgeId,
+  MONTHLY_BADGES,
+  monthlyReached,
+  monthOf,
+  monthRange,
+  monthsBetween,
+  streakStats,
+} from '../../lib/record'
+import { getConnection } from '../../lib/solana'
 
 const C = {
-  bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
-  card: '#FFFFFF', dark: '#2D2926',
-  amber: '#D97706', amber2: '#F59E0B', amberBg: '#FFFBEB',
-  text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
+  bg: '#FAFAF9',
+  amber: '#D97706', amberBg: '#FFFBEB',
+  text: '#1C1917', sub: '#78716C', muted: '#A8A29E',
 }
 
-export default function GoalsScreen() {
-  const { publicKey, dataAddress } = useWallet()
-  const address = dataAddress
-  // Counted from the workouts on the device's calendar (hooks/useGoals.ts).
-  const { goals, week: days } = useGoals(address)
+const OK_ONLY: PopupAction[] = [{ label: 'OK', primary: true }]
 
-  const maxReps = Math.max(...days.map(d => d.reps), 1)
+/**
+ * The record: a month calendar and that month's badges with the current streak, all counted from the
+ * workouts on the device's calendar, where a day counts once it reaches the daily goal
+ * (lib/record.ts). A tap on an unlocked badge claims it for 0.001 SOL straight away, as the Badges
+ * tab's Claim now does (lib/badgeClaim.ts); the wallet's approval screen is the confirmation. The
+ * claim's signature is kept on the phone from the moment the wallet sends it
+ * (hooks/useMonthlyBadges.ts), so a payment that went through is recorded even if this screen
+ * couldn't finish.
+ */
+export default function GoalsScreen() {
+  const { publicKey, dataAddress, authorizeAndSign } = useWallet()
+  const { totals, today, loading: workoutsLoading } = useWorkoutDays(dataAddress)
+  const days = goalDays(totals)
+  const { records, sent, recheck, trackSent, settleSent, dropSent } = useMonthlyBadges(dataAddress, days, today)
+  // Months back from this one, so the view follows the calendar into a new month.
+  const [back, setBack] = useState(0)
+  const [claiming, setClaiming] = useState<string | null>(null)
+  // Set on the tap itself: state only changes on the next render, which a fast second tap can beat.
+  const claimingRef = useRef(false)
+
+  // Coming back to Goals looks at claims sent earlier again (the tab stays mounted).
+  useFocusEffect(
+    useCallback(() => {
+      void recheck()
+    }, [recheck]),
+  )
+  // The popup's content stays while it fades out, so closing only clears popupOpen.
+  const [popup, setPopup] = useState<{ title: string; message: string; actions: PopupAction[] } | null>(null)
+  const [popupOpen, setPopupOpen] = useState(false)
+  const showPopup = (p: { title: string; message: string; actions: PopupAction[] }) => {
+    setPopup(p)
+    setPopupOpen(true)
+  }
+
+  const { first, last } = monthRange(totals, today)
+  const span = monthsBetween(first, last)
+  const steps = Math.min(back, span)
+  const month = addMonths(last, -steps)
+
+  // Nothing can be claimed, and no badge shows Locked or Claim, until the workouts, the records and
+  // the claims kept on the phone are all read.
+  const loading = !!dataAddress && (workoutsLoading || records === null || sent === null)
+  // The home screen's STREAK (hooks/useUserStats.ts uses the same count), beside this month's badges
+  // only, and not at all while reading or at 0, so no 0 flashes.
+  const current = streakStats(days, today).current
+  const streak = !loading && month === monthOf(today) && current > 0 ? current : undefined
+  const reached = monthlyReached(days, month, today)
+  const items: MonthlyBadgeItem[] = MONTHLY_BADGES.map(badge => {
+    const id = monthlyBadgeId(badge.type, month)
+    const record = records?.get(id)
+    const sentState = sent?.get(id)
+    const state: MonthlyBadgeState =
+      loading ? 'loading'
+      : record?.claimed || sentState === 'unsaved' ? 'claimed'
+      : sentState === 'checking' ? 'checking'
+      : reached.has(badge.type) || record?.earned ? 'unlocked'
+      : 'locked'
+    return { badge, state, busy: claiming === id }
+  })
+
+  const claim = async (item: MonthlyBadgeItem) => {
+    const { badge } = item
+    const id = monthlyBadgeId(badge.type, month)
+    if (claimingRef.current || loading || !publicKey || !dataAddress || !records || !sent) return
+    if (records.get(id)?.claimed || sent.has(id)) return
+    claimingRef.current = true
+    setClaiming(id)
+    const memo = claimMemo(badge.type, month)
+    // Set by onSent: from then on the payment may go through whatever happens here.
+    const kept: { claim: PendingClaim | null } = { claim: null }
+    try {
+      await sendWithWallet({
+        connection: getConnection(),
+        payer: publicKey,
+        instructions: claimInstructions(publicKey, memo),
+        authorizeAndSign,
+        onSent: async (signature, lastValidBlockHeight) => {
+          kept.claim = { id, type: badge.type, month, memo, signature, lastValidBlockHeight, sentAt: Date.now() }
+          await trackSent(kept.claim)
+        },
+      })
+      // Confirmed. The tile turns to Claimed; only a claim that couldn't be saved yet is told.
+      if (kept.claim && !(await settleSent(kept.claim))) {
+        showPopup({
+          title: 'Claim not saved yet',
+          message: "Your claim went through, but it couldn't be saved yet. The badge shows as claimed while Kinlog keeps trying to save it.",
+          actions: OK_ONLY,
+        })
+      }
+    } catch (e) {
+      console.log('Badge claim failed:', (e as any)?.message ?? e)
+      if (!isWalletCancel(e)) {
+        let alert = badgeClaimAlert(e)
+        if (kept.claim) {
+          // Sent. Only a failure the chain reported is final: nothing was paid, so it can be claimed
+          // again. Anything else (expired, a wallet or network error) stays Checking, for recheck to
+          // settle by searching the whole history.
+          if (e instanceof TxError && e.kind === 'failed') {
+            await dropSent(kept.claim)
+          } else {
+            alert = {
+              title: 'Not confirmed yet',
+              body: "Your claim was sent but isn't confirmed yet. Until Kinlog confirms it, the badge shows Checking. If it doesn't go through, you can claim it again.",
+            }
+          }
+        }
+        showPopup({ title: alert.title, message: alert.body, actions: OK_ONLY })
+      }
+    } finally {
+      claimingRef.current = false
+      setClaiming(null)
+    }
+  }
 
   return (
     // Top edge only: the tab bar already covers the bottom inset (see app/(tabs)/index.tsx).
     <SafeAreaView style={s.safe} edges={['top']}>
-      <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* Header */}
+      <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         <View style={s.header}>
           <Text style={s.headerSub}>Tracking</Text>
           <Text style={s.headerTitle}>Goal Tracker</Text>
@@ -37,90 +164,33 @@ export default function GoalsScreen() {
         )}
         <SignInGate />
 
-        {/* Goal cards */}
-        {goals.map((g) => {
-          const pct = Math.min(Math.round((g.current / g.total) * 100), 100)
-          return (
-            <View key={g.id} style={s.goalCard}>
-              <View style={s.goalTop}>
-                <View style={{ flex: 1 }}>
-                  <View style={s.tagWrap}>
-                    <Text style={s.tagText}>{g.tag}</Text>
-                  </View>
-                  <Text style={s.goalTitle}>{g.title}</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[s.goalPct, { color: g.color }]}>{pct}%</Text>
-                  <Text style={s.goalFrac}>{g.current} / {g.total}</Text>
-                </View>
-              </View>
-
-              {/* Progress bar */}
-              <View style={s.progressTrack}>
-                <View style={[s.progressFill, { width: `${pct}%`, backgroundColor: g.color }]}/>
-              </View>
-              <Text style={s.goalNote}>{g.note}</Text>
-
-              {/* Weekly bar chart - 실제 Firebase 데이터 */}
-              {g.tag === 'Weekly' && (
-                <View style={s.barChart}>
-                  {days.map((day, j) => {
-                    const heightPct = maxReps > 0 ? day.reps / maxReps : 0
-                    return (
-                      <View key={j} style={s.barCol}>
-                        <Text style={[s.barReps, day.isToday && { color: C.amber2 }]}>
-                          {day.reps > 0 ? day.reps : ''}
-                        </Text>
-                        <View style={s.barTrack}>
-                          <View style={[
-                            s.barFill,
-                            {
-                              height: `${Math.max(heightPct * 100, day.reps > 0 ? 8 : 0)}%`,
-                              backgroundColor: day.isToday
-                                ? C.amber2
-                                : day.reps > 0
-                                  ? 'rgba(14,165,233,0.5)'
-                                  : C.bg3,
-                            },
-                          ]}/>
-                        </View>
-                        <Text style={[s.barLabel, day.isToday && { color: C.amber2, fontWeight: '700' }]}>
-                          {day.label}
-                        </Text>
-                      </View>
-                    )
-                  })}
-                </View>
-              )}
-
-              {/* Monthly dots: the days of this month with a workout */}
-              {g.tag === 'Monthly' && (
-                <View style={s.dotGrid}>
-                  {Array.from({ length: g.total }, (_, k) => k + 1).map(d => {
-                    const done = g.dates?.includes(d) ?? false
-                    return (
-                      <View key={d} style={[s.dot, done && s.dotActive]}>
-                        <Text style={[s.dotText, done && s.dotTextActive]}>{d}</Text>
-                      </View>
-                    )
-                  })}
-                </View>
-              )}
-            </View>
-          )
-        })}
-
-        {/* Spacer */}
-        <View style={{ height: 8 }}/>
-
+        <MonthCalendar
+          month={month}
+          totals={totals}
+          today={today}
+          onPrev={steps < span ? () => setBack(steps + 1) : undefined}
+          onNext={steps > 0 ? () => setBack(steps - 1) : undefined}
+        />
+        <MonthlyBadgeGrid month={month} items={items} streak={streak} onClaim={item => void claim(item)} />
       </ScrollView>
+
+      {popup && (
+        <Popup
+          visible={popupOpen}
+          title={popup.title}
+          message={popup.message}
+          actions={popup.actions}
+          onClose={() => setPopupOpen(false)}
+        />
+      )}
     </SafeAreaView>
   )
 }
 
 const s = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: C.bg },
-  scroll: { flex: 1, paddingHorizontal: 20 },
+  safe:    { flex: 1, backgroundColor: C.bg },
+  scroll:  { flex: 1, paddingHorizontal: 20 },
+  content: { paddingBottom: 8 },
 
   header:      { paddingTop: 16, paddingBottom: 16 },
   headerSub:   { fontSize: 10, color: C.muted, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 },
@@ -128,33 +198,4 @@ const s = StyleSheet.create({
 
   noWallet:     { backgroundColor: C.amberBg, borderRadius: 14, padding: 16, marginBottom: 16, alignItems: 'center' },
   noWalletText: { fontSize: 13, color: C.amber, fontWeight: '600' },
-
-  goalCard:  { backgroundColor: C.card, borderRadius: 22, padding: 18, marginBottom: 14, borderWidth: 1.5, borderColor: C.line, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  goalTop:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 },
-
-  tagWrap: { backgroundColor: C.bg2, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 100, alignSelf: 'flex-start', marginBottom: 8 },
-  tagText: { fontSize: 10, fontWeight: '700', color: C.sub, letterSpacing: 0.5 },
-
-  goalTitle: { fontSize: 16, fontWeight: '800', color: C.text },
-  goalPct:   { fontSize: 30, fontWeight: '900', lineHeight: 32 },
-  goalFrac:  { fontSize: 10, color: C.muted, marginTop: 2 },
-
-  progressTrack: { height: 7, backgroundColor: C.bg2, borderRadius: 100, overflow: 'hidden', marginBottom: 10 },
-  progressFill:  { height: 7, borderRadius: 100 },
-  goalNote:      { fontSize: 11, color: C.muted },
-
-  barChart: { flexDirection: 'row', gap: 6, alignItems: 'flex-end', marginTop: 16, height: 80 },
-  barCol:   { flex: 1, alignItems: 'center', gap: 4 },
-  barReps:  { fontSize: 8, color: C.muted, height: 12 },
-  barTrack: { width: '100%', flex: 1, backgroundColor: C.bg2, borderRadius: 6, overflow: 'hidden', justifyContent: 'flex-end' },
-  barFill:  { width: '100%', borderRadius: 6 },
-  barLabel: { fontSize: 8, color: C.muted },
-
-  dotGrid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 14 },
-  dot:           { width: 28, height: 28, borderRadius: 14, backgroundColor: C.bg2, alignItems: 'center', justifyContent: 'center' },
-  dotActive:     { backgroundColor: C.amber2 },
-  dotText:       { fontSize: 8, color: C.muted },
-  dotTextActive: { color: '#fff', fontWeight: '700' },
-
-
 })

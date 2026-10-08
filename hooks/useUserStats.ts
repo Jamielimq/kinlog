@@ -35,11 +35,13 @@ export function useUserStats(address: string | null) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Nothing from the previous wallet shows, and loading lasts until both reads below are in.
+    setStats(DEFAULT_STATS);
     if (!address) {
-      setStats(DEFAULT_STATS);
       setLoading(false);
       return;
     }
+    setLoading(true);
 
     const db = getFirestore(getApp());
 

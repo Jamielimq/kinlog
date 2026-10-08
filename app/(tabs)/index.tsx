@@ -10,6 +10,7 @@ import { useWallet } from '../../context/WalletContext'
 import { useChallenges, type ChallengeView } from '../../hooks/useChallenges'
 import { useGoals } from '../../hooks/useGoals'
 import { useUserStats } from '../../hooks/useUserStats'
+import { dataLoading } from '../../lib/dataLoading'
 
 const C = {
   bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
@@ -33,17 +34,20 @@ function liveDayIndex(q: ChallengeView): number {
 export default function HomeScreen() {
   const { publicKey, shortAddress, connecting, restoring, connect, disconnect, dataAddress } = useWallet()
   const address = dataAddress
-  const { goals } = useGoals(address)
-  const { stats } = useUserStats(address)
+  const { goals, loading: goalsLoading } = useGoals(address)
+  const { stats, loading: statsLoading } = useUserStats(address)
   const { challenges } = useChallenges(address)
   const [showDisconnect, setShowDisconnect] = useState(false)
   const [showHowTo, setShowHowTo] = useState(false)
+  // A connected wallet's numbers stay blank until its data is read, before sign-in too, so no 0 shows
+  // that isn't the wallet's own (lib/dataLoading.ts).
+  const blank = dataLoading(!!publicKey, dataAddress, goalsLoading || statsLoading)
 
   const dailyGoal = goals.find(g => g.id === 'daily')
   const weeklyGoal = goals.find(g => g.id === 'weekly')
   const reps = dailyGoal?.current ?? 0
   const target = dailyGoal?.total ?? 30
-  const progress = Math.min(reps / target, 1)
+  const progress = blank ? 0 : Math.min(reps / target, 1)
 
   const formattedPoints = stats.points.toLocaleString()
   const streakDisplay = stats.currentStreak > 0 ? `${stats.currentStreak}d` : '0d'
@@ -95,7 +99,7 @@ export default function HomeScreen() {
             <View>
               <Text style={s.progressLabel}>{"TODAY'S PROGRESS"}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6 }}>
-                <Text style={s.progressReps}>{reps}</Text>
+                <Text style={s.progressReps}>{blank ? ' ' : reps}</Text>
                 <Text style={s.progressTarget}>/ {target}</Text>
               </View>
             </View>
@@ -105,18 +109,18 @@ export default function HomeScreen() {
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={s.progressNote}>
-              {reps >= target ? '🎉 Goal reached!' : `${target - reps} more to hit your goal`}
+              {blank ? ' ' : reps >= target ? '🎉 Goal reached!' : `${target - reps} more to hit your goal`}
             </Text>
-            <Text style={s.progressPct}>{Math.round(progress * 100)}%</Text>
+            <Text style={s.progressPct}>{blank ? ' ' : `${Math.round(progress * 100)}%`}</Text>
           </View>
         </View>
 
         {/* Stats Row */}
         <View style={s.statsRow}>
           {[
-            { label: 'Points',    value: formattedPoints, accent: true  },
-            { label: 'Streak',    value: streakDisplay,   accent: false },
-            { label: 'This Week', value: weeklyGoal ? `${weeklyGoal.current}/7` : '0/7', accent: false },
+            { label: 'Points',    value: blank ? ' ' : formattedPoints, accent: true  },
+            { label: 'Streak',    value: blank ? ' ' : streakDisplay,   accent: false },
+            { label: 'This Week', value: blank ? ' ' : weeklyGoal ? `${weeklyGoal.current}/7` : '0/7', accent: false },
           ].map(stat => (
             <View key={stat.label} style={[s.statCard, stat.accent && s.statCardAccent]}>
               <Text style={[s.statValue, stat.accent && s.statValueAccent]}>{stat.value}</Text>

@@ -144,6 +144,13 @@ export const MONTHLY_BADGES: readonly MonthlyBadge[] = [
   { type: 'sweep', need: 'all', name: 'Full Month', rarity: 'Epic', pts: 300 },
 ];
 
+/** The Badges tab's line for a monthly badge. */
+export function monthlyDesc(b: MonthlyBadge): string {
+  if (b.need === 'all') return `${DAILY_GOAL} squats every day of a month.`;
+  if (b.need === 1) return `${DAILY_GOAL} squats on any day of a month.`;
+  return `${DAILY_GOAL} squats ${b.need} days in a row in a month.`;
+}
+
 /** users/{wallet}/badges/<id> for one monthly badge in one month: month_run3_202610. */
 export const monthlyBadgeId = (type: MonthlyType, m: MonthKey) => `month_${type}_${m.replace('-', '')}`;
 

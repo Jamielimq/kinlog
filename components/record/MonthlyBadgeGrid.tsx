@@ -24,19 +24,19 @@ export interface MonthlyBadgeItem {
 /**
  * The shown month's nine monthly badges, 3 × 3, with the current streak beside the title when the
  * screen passes one. Only an unlocked badge responds to a tap, which claims it straight away; no
- * other can be pressed, nor any while a claim is under way.
+ * other can be pressed, nor any while a claim is under way (claiming: any badge's, from either tab).
  */
-export function MonthlyBadgeGrid({ month, items, streak, onClaim }: {
+export function MonthlyBadgeGrid({ month, items, streak, claiming, onClaim }: {
   month: MonthKey
   items: MonthlyBadgeItem[]
   streak?: number
+  claiming: boolean
   onClaim: (item: MonthlyBadgeItem) => void
 }) {
   const started = month >= FIRST_BADGE_MONTH
   const loading = items.some(i => i.state === 'loading')
   const rows = [0, 1, 2].map(r => items.slice(r * 3, r * 3 + 3))
   const earned = items.filter(i => i.state !== 'locked' && i.state !== 'loading').length
-  const claiming = items.some(i => i.busy)
 
   return (
     <View style={s.card}>

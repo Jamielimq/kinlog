@@ -6,6 +6,7 @@ import { useWallet } from '../../context/WalletContext'
 import { useBadges } from '../../hooks/useBadges'
 import { usePoints } from '../../hooks/usePoints'
 import { useUserStats } from '../../hooks/useUserStats'
+import { dataLoading } from '../../lib/dataLoading'
 
 const C = {
   bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
@@ -25,20 +26,23 @@ function getActivityIcon(reason: string) {
 export default function ProfileScreen() {
   const { publicKey, shortAddress, connecting, restoring, connect, disconnect, dataAddress } = useWallet()
   const address = dataAddress
-  const { stats } = useUserStats(address)
-  const { badges } = useBadges(address)
+  const { stats, loading: statsLoading } = useUserStats(address)
+  const { badges, loading: badgesLoading } = useBadges(address)
   const { history } = usePoints(address)
   const [showDisconnect, setShowDisconnect] = useState(false)
   const [activeModal, setActiveModal] = useState<'workout' | 'points' | null>(null)
+  // A connected wallet's numbers stay blank until its data is read, before sign-in too, so no 0 shows
+  // that isn't the wallet's own (lib/dataLoading.ts).
+  const blank = dataLoading(!!publicKey, dataAddress, statsLoading || badgesLoading)
 
   const formattedPoints = stats.points.toLocaleString()
   const mintedBadges = badges.filter(b => b.mintedAt).length
 
   const STATS = [
-    { label: 'Total Points',   value: formattedPoints,        color: C.amber  },
-    { label: 'Total Workouts', value: `${stats.totalWorkouts}`, color: C.dark2 },
-    { label: 'Achievements',   value: `${mintedBadges}`,       color: C.dark2 },
-    { label: 'Best Streak',    value: `${stats.bestStreak}d`,  color: C.dark2 },
+    { label: 'Total Points',   value: blank ? ' ' : formattedPoints,          color: C.amber  },
+    { label: 'Total Workouts', value: blank ? ' ' : `${stats.totalWorkouts}`, color: C.dark2 },
+    { label: 'Achievements',   value: blank ? ' ' : `${mintedBadges}`,        color: C.dark2 },
+    { label: 'Best Streak',    value: blank ? ' ' : `${stats.bestStreak}d`,   color: C.dark2 },
   ]
 
   // workout 기록만 필터 (squats completed)
@@ -78,8 +82,9 @@ export default function ProfileScreen() {
           <View style={s.badgeRow}>
             {publicKey ? (
               <>
-                <View style={s.badgeAmber}><Text style={s.badgeAmberText}>✦ {formattedPoints} Points</Text></View>
-                {stats.currentStreak > 0 && (
+                {/* Invisible while waiting rather than gone, so the card keeps its height. */}
+                <View style={[s.badgeAmber, blank && s.hidden]}><Text style={s.badgeAmberText}>✦ {formattedPoints} Points</Text></View>
+                {!blank && stats.currentStreak > 0 && (
                   <View style={s.badgeAmber}><Text style={s.badgeAmberText}>🔥 {stats.currentStreak}d Streak</Text></View>
                 )}
               </>
@@ -145,9 +150,12 @@ export default function ProfileScreen() {
             <Text style={s.modalTitle}>Workout History</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
               {workoutHistory.length === 0 ? (
-                <View style={s.emptyState}>
-                  <Text style={s.emptyText}>No workouts yet. Start your first session!</Text>
-                </View>
+                // Not while waiting: the wallet's workouts may just not be read yet.
+                !blank && (
+                  <View style={s.emptyState}>
+                    <Text style={s.emptyText}>No workouts yet. Start your first session!</Text>
+                  </View>
+                )
               ) : (
                 workoutHistory.map((item, i) => (
                   <View key={item.id ?? i} style={[s.historyRow, i < workoutHistory.length - 1 && s.historyBorder]}>
@@ -179,9 +187,11 @@ export default function ProfileScreen() {
             <Text style={s.modalTitle}>Points Log</Text>
             <ScrollView showsVerticalScrollIndicator={false}>
               {pointsHistory.length === 0 ? (
-                <View style={s.emptyState}>
-                  <Text style={s.emptyText}>No points earned yet.</Text>
-                </View>
+                !blank && (
+                  <View style={s.emptyState}>
+                    <Text style={s.emptyText}>No points earned yet.</Text>
+                  </View>
+                )
               ) : (
                 pointsHistory.map((item, i) => (
                   <View key={item.id ?? i} style={[s.historyRow, i < pointsHistory.length - 1 && s.historyBorder]}>
@@ -247,6 +257,7 @@ const s = StyleSheet.create({
   badgeRow:       { flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' },
   badgeAmber:     { backgroundColor: `${C.amber}22`, borderWidth: 1, borderColor: `${C.amber}44`, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 100 },
   badgeAmberText: { fontSize: 11, fontWeight: '700', color: C.amber2 },
+  hidden:         { opacity: 0 },
   badge:          { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 100 },
   badgeText:      { fontSize: 11, color: 'rgba(255,255,255,0.6)' },
 

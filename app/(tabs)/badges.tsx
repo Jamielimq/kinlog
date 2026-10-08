@@ -1,35 +1,46 @@
 import { getApp } from '@react-native-firebase/app'
 import { doc, getFirestore, setDoc } from '@react-native-firebase/firestore'
-import { Connection, PublicKey, SystemProgram, Transaction, clusterApiUrl } from '@solana/web3.js'
-import { useEffect, useState } from 'react'
-import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useEffect, useState } from 'react'
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { BadgeCard } from '../../components/badges/BadgeCard'
 import { SignInGate } from '../../components/SignInGate'
-import { RARITY_COLOR } from '../../constants/rarity'
+import { useClaims } from '../../context/ClaimsContext'
 import { useWallet } from '../../context/WalletContext'
-import { useBadges } from '../../hooks/useBadges'
 import { useSkrStaking } from '../../hooks/useSkrStaking'
+import { type CardCategory, cardCounts, sortCards } from '../../lib/badgeCards'
 
 const C = {
   bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
   card: '#FFFFFF', dark: '#2D2926', dark2: '#3A3532',
   amber: '#D97706', amber2: '#F59E0B', amber3: '#FCD34D', amberBg: '#FFFBEB',
   text: '#1C1917', sub: '#78716C', muted: '#A8A29E', line: '#E7E5E4',
+  red: '#EF4444',
 }
 
+// The category chips after All, in this order.
+const CHIPS: { key: CardCategory; label: string }[] = [
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'lockedin', label: 'Locked In' },
+  { key: 'squats', label: 'Squats' },
+  { key: 'streak', label: 'Streak' },
+  { key: 'special', label: 'Special' },
+  { key: 'challenge', label: 'Challenge' },
+]
 
-
-// Treasury wallet that receives mint fees
-const TREASURY_WALLET = new PublicKey('EyEohuV8fBXyNDZK9ZtYFNe6A6FfUw9ndSwBbtNqTxmJ')
-const MINT_FEE_LAMPORTS = 1_000_000 // 0.001 SOL
-
+/**
+ * Every badge: lifetime, monthly and Square, each claimed for 0.001 SOL through the flow Goals uses
+ * too (context/ClaimsContext.tsx). A claim that goes through only changes its card; one that doesn't
+ * gets a popup. The tiles count each card once: Ready (something to claim, or a claim being
+ * checked), Earned (all claimed) or Locked.
+ */
 export default function BadgesScreen() {
-  const { publicKey, shortAddress, connecting, connect, disconnect, authorizeAndSign, dataAddress } = useWallet()
+  const { publicKey, shortAddress, connecting, connect, disconnect, dataAddress } = useWallet()
   const address = dataAddress
-  const { badges, loading } = useBadges(address)
+  const { cards, loading, claimingId, claim, recheck } = useClaims()
   const [showDisconnect, setShowDisconnect] = useState(false)
-  const [activeTab, setActiveTab] = useState('all')
-  const [minting, setMinting] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'all' | CardCategory>('all')
   const { isStaker } = useSkrStaking(address)
 
   // Auto-award SKR Staker badge
@@ -43,105 +54,28 @@ export default function BadgesScreen() {
       )
     }
   }, [isStaker, address])
-  const [mintSuccess, setMintSuccess] = useState<{ badgeName: string; tx: string; points: number } | null>(null)
 
-  const hasMintable = (cat?: string) => badges.some(b => b.earned && !b.mintedAt && (cat ? b.category === cat : true))
-  const TABS = [
-    { key: 'all',       label: `All (${badges.length})`,    dot: hasMintable()          },
-    { key: 'challenge', label: `Challenge (${badges.filter(b => b.category === 'challenge').length})`, dot: hasMintable('challenge') },
-    { key: 'squats',    label: `Squats (${badges.filter(b => b.category === 'squats').length})`,  dot: hasMintable('squats')  },
-    { key: 'streak',    label: `Streak (${badges.filter(b => b.category === 'streak').length})`,  dot: hasMintable('streak')  },
-    { key: 'special',   label: `Special (${badges.filter(b => b.category === 'special').length})`, dot: hasMintable('special') },
+  // Coming back to Badges looks at claims sent earlier again (the tab stays mounted).
+  useFocusEffect(
+    useCallback(() => {
+      void recheck()
+    }, [recheck]),
+  )
+
+  const hasReady = (cat?: CardCategory) => cards.some(c => c.state === 'ready' && (!cat || c.category === cat))
+  const TABS: { key: 'all' | CardCategory; label: string; dot: boolean }[] = [
+    { key: 'all', label: `All (${cards.length})`, dot: hasReady() },
+    ...CHIPS.map(chip => ({ ...chip, n: cards.filter(c => c.category === chip.key).length }))
+      // Challenge has cards only for wallets that earned the old quest badges.
+      .filter(chip => chip.n > 0)
+      .map(chip => ({ key: chip.key, label: `${chip.label} (${chip.n})`, dot: hasReady(chip.key) })),
   ]
-  const categoryOrder = { challenge: 0, squats: 1, streak: 2, special: 3 }
-  const getSortRank = (b: any) => {
-    if (b.earned && b.mintedAt) return 0   // Minted
-    if (b.earned && !b.mintedAt) return 1  // Mintable
-    return 2                                // Locked
-  }
-  const filtered = (
-    activeTab === 'all'
-      ? [...badges]
-      : badges.filter(b => b.category === activeTab)
-  ).sort((a, b) => {
-    const rankDiff = getSortRank(a) - getSortRank(b)
-    if (rankDiff !== 0) return rankDiff
-    return (categoryOrder[a.category] ?? 9) - (categoryOrder[b.category] ?? 9)
-  })
-  const earned = badges.filter(b => b.earned).length
-  const total  = badges.length
-  const mintableCount = badges.filter(b => b.earned && !b.mintedAt).length
-
-  const handleMint = async (badgeId: string) => {
-    if (!address || !publicKey) return
-    setMinting(badgeId)
-    try {
-      const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed')
-      let txSignature = ''
-
-      await authorizeAndSign(async (wallet, authToken) => {
-        // Build transfer transaction
-        const { blockhash } = await connection.getLatestBlockhash()
-        const tx = new Transaction()
-        tx.recentBlockhash = blockhash
-        tx.feePayer = publicKey
-        tx.add(SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: TREASURY_WALLET,
-          lamports: MINT_FEE_LAMPORTS,
-        }))
-
-        // Sign and send - pass Transaction object directly (web3js wrapper handles serialization)
-        const signatures = await wallet.signAndSendTransactions({
-          transactions: [tx],
-        })
-
-        console.log('signatures:', JSON.stringify(signatures))
-        txSignature = signatures[0]
-      })
-
-      // A missing signature must not flip the badge to "Claimed" - the UI keys off
-      // mintedAt alone, so an empty write would lock the badge out permanently.
-      // Deliberately not claiming the user wasn't charged: the transaction may well
-      // have been submitted, and the app has no way to know either way.
-      if (typeof txSignature !== 'string' || txSignature.length === 0) {
-        throw new Error("Couldn't confirm the transaction. Please try again.")
-      }
-
-      // Save mint record to Firebase
-      const db = getFirestore(getApp())
-      const mintedBadgeData = badges.find(b => b.id === badgeId)
-      const mintPts = mintedBadgeData?.pts ?? 0
-      const now = Date.now()
-
-      await setDoc(
-        doc(db, 'users', address, 'badges', badgeId),
-        { mintedAt: now, txSignature },
-        { merge: true }
-      )
-
-      // Award badge points
-      if (mintPts > 0) {
-        const { increment: fsIncrement } = await import('@react-native-firebase/firestore')
-        await setDoc(doc(db, 'users', address), { points: fsIncrement(mintPts), updatedAt: now }, { merge: true })
-        await (await import('@react-native-firebase/firestore')).addDoc(
-          (await import('@react-native-firebase/firestore')).collection(db, 'users', address, 'points_history'),
-          { reason: `Claimed badge: ${mintedBadgeData?.name}`, amount: mintPts, createdAt: now }
-        )
-      }
-
-      const mintedBadge = badges.find(b => b.id === badgeId)
-      setMintSuccess({ badgeName: mintedBadge?.name ?? badgeId, tx: txSignature, points: mintPts })
-    } catch (e: any) {
-      // Ignore user cancellation
-      if (!e?.message?.includes('CancellationException') && !e?.message?.includes('cancelled')) {
-        console.error('Mint error:', e)
-        Alert.alert('Claim Failed', e?.message ?? 'Transaction failed. Please try again.')
-      }
-    } finally {
-      setMinting(null)
-    }
-  }
+  // A chip that went away (another wallet) falls back to All.
+  const tab = TABS.some(t => t.key === activeTab) ? activeTab : 'all'
+  const shown = sortCards(tab === 'all' ? cards : cards.filter(c => c.category === tab))
+  const counts = cardCounts(cards)
+  // No numbers until everything is read, so no count flashes 0.
+  const num = (n: number) => (loading ? ' ' : String(n))
 
   return (
     // Top edge only: the tab bar already covers the bottom inset (see app/(tabs)/index.tsx).
@@ -171,27 +105,32 @@ export default function BadgesScreen() {
         {/* Stats row */}
         <View style={s.statsRow}>
           <View style={s.statBox}>
-            <Text style={s.statVal}>{earned}</Text>
-            <Text style={s.statLbl}>Earned</Text>
-            {mintableCount > 0 && (
-              <Text style={s.statReady}>{mintableCount} to claim</Text>
-            )}
+            <Text style={s.statVal}>{num(counts.ready)}</Text>
+            <View style={s.statLblRow}>
+              <Text style={s.statLbl}>Ready</Text>
+              {!loading && hasReady() && <View style={s.dot}/>}
+            </View>
           </View>
           <View style={s.statDivider}/>
           <View style={s.statBox}>
-            <Text style={s.statVal}>{total - earned}</Text>
+            <Text style={s.statVal}>{num(counts.earned)}</Text>
+            <Text style={s.statLbl}>Earned</Text>
+          </View>
+          <View style={s.statDivider}/>
+          <View style={s.statBox}>
+            <Text style={s.statVal}>{num(counts.locked)}</Text>
             <Text style={s.statLbl}>Locked</Text>
           </View>
           <View style={s.statDivider}/>
           <View style={s.statBox}>
-            <Text style={s.statVal}>{total}</Text>
+            <Text style={s.statVal}>{num(counts.total)}</Text>
             <Text style={s.statLbl}>Total</Text>
           </View>
         </View>
 
         {/* Wallet card */}
         <TouchableOpacity style={s.walletCard} onPress={publicKey ? () => setShowDisconnect(true) : connect} activeOpacity={0.8}>
-          <View style={[s.walletIndicator, { backgroundColor: publicKey ? C.amber2 : '#EF4444' }]}/>
+          <View style={[s.walletIndicator, { backgroundColor: publicKey ? C.amber2 : C.red }]}/>
           <View style={{ flex: 1 }}>
             <Text style={s.walletTitle}>{publicKey ? 'Solana Wallet Connected' : 'Wallet Not Connected'}</Text>
             <Text style={s.walletAddr}>{shortAddress ?? 'Connect to claim achievement points'}</Text>
@@ -203,16 +142,16 @@ export default function BadgesScreen() {
 
         {/* Category tabs */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabScroll} contentContainerStyle={s.tabRow}>
-          {TABS.map(tab => (
+          {TABS.map(t => (
             <TouchableOpacity
-              key={tab.key}
-              style={[s.tab, activeTab === tab.key && s.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
+              key={t.key}
+              style={[s.tab, tab === t.key && s.tabActive]}
+              onPress={() => setActiveTab(t.key)}
               activeOpacity={0.8}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text style={[s.tabText, activeTab === tab.key && s.tabTextActive]}>{tab.label}</Text>
-                {tab.dot && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }}/>}
+              <View style={s.tabInner}>
+                <Text style={[s.tabText, tab === t.key && s.tabTextActive]}>{t.label}</Text>
+                {t.dot && <View style={s.dot}/>}
               </View>
             </TouchableOpacity>
           ))}
@@ -220,75 +159,21 @@ export default function BadgesScreen() {
 
         {/* Badge grid */}
         <View style={s.grid}>
-          {filtered.map((b) => (
-            <TouchableOpacity key={b.id} style={[s.badgeCard, !b.earned && s.badgeCardLocked]} activeOpacity={0.8}>
-              <Text style={[s.rarityLabel, { color: RARITY_COLOR[b.rarity] }]}>
-                {b.rarity.toUpperCase()}
-              </Text>
-              <View style={[s.badgeEmoji, !b.earned && s.badgeEmojiLocked]}>
-                <Text style={{ fontSize: 28, opacity: b.earned ? 1 : 0.4 }}>{b.emoji}</Text>
-                {(b.instanceCount ?? 0) >= 2 && (
-                  <View style={s.countPill}>
-                    <Text style={s.countPillText}>×{b.instanceCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={s.badgeName}>{b.name}</Text>
-              <Text style={s.badgeDesc}>{b.desc}</Text>
-              {b.earned ? (
-                <View style={s.earnedTag}>
-                  <Text style={s.earnedTagText}>
-                    {b.pts > 0 ? `+${b.pts}pt` : 'Earned'}{b.earnedAt ? ` · ${new Date(b.earnedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}` : ''}
-                  </Text>
-                </View>
-              ) : (
-                <View style={s.lockedTag}>
-                  <Text style={s.lockedTagText}>🔒 Locked</Text>
-                </View>
-              )}
-              {b.earned && !b.mintedAt && (
-                <TouchableOpacity
-                  style={[s.mintBtn, minting === b.id && s.mintBtnDisabled]}
-                  onPress={() => handleMint(b.id)}
-                  disabled={minting !== null}
-                  activeOpacity={0.8}
-                >
-                  <Text style={s.mintBtnText}>
-                    {minting === b.id ? 'Claiming...' : 'Claim now'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              {b.mintedAt && (
-                <View style={s.mintedTag}>
-                  <Text style={s.mintedTagText}>✦ Claimed</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+          {shown.map(card => (
+            <BadgeCard
+              key={card.key}
+              card={card}
+              busy={claimingId !== null && card.claimIds.includes(claimingId)}
+              disabled={loading || claimingId !== null}
+              onClaim={() => {
+                if (card.open[0]) void claim(card.open[0])
+              }}
+            />
           ))}
         </View>
 
         <View style={{ height: 24 }}/>
       </ScrollView>
-
-      {/* Mint Success Modal */}
-      <Modal visible={!!mintSuccess} transparent animationType="fade">
-        <View style={s.modalOverlay}>
-          <View style={s.modalBox}>
-            <View style={s.modalHandle}/>
-            <Text style={{ fontSize: 40, marginBottom: 12 }}>🎉</Text>
-            <Text style={s.modalTitle}>Points Claimed! ✨</Text>
-            <Text style={[s.modalAddr, { color: C.amber }]}>{mintSuccess?.badgeName}</Text>
-            <Text style={s.modalDesc}>+{mintSuccess?.points ?? 0} points claimed and recorded on Solana.</Text>
-            <View style={{ backgroundColor: C.bg2, borderRadius: 12, padding: 12, width: '100%', marginBottom: 20 }}>
-              <Text style={{ fontSize: 10, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>TRANSACTION</Text>
-              <Text style={{ fontSize: 11, color: C.sub, fontWeight: '600' }} numberOfLines={1}>{mintSuccess?.tx}</Text>
-            </View>
-            <TouchableOpacity style={s.modalDisconnect} onPress={() => setMintSuccess(null)}>
-              <Text style={s.modalDisconnectText}>Awesome! 🚀</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Disconnect Modal */}
       <Modal visible={showDisconnect} transparent animationType="fade">
@@ -329,7 +214,7 @@ const s = StyleSheet.create({
   statBox:     { flex: 1, alignItems: 'center' },
   statVal:     { fontSize: 22, fontWeight: '900', color: C.text, marginBottom: 2 },
   statLbl:     { fontSize: 9, color: C.muted, letterSpacing: 0.5, textTransform: 'uppercase' },
-  statReady:   { fontSize: 9, color: C.amber, fontWeight: '700', marginTop: 4, letterSpacing: 0.3 },
+  statLblRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statDivider: { width: 1, height: 32, backgroundColor: C.line },
 
   walletCard:      { backgroundColor: C.dark, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
@@ -343,28 +228,13 @@ const s = StyleSheet.create({
   tabRow:     { flexDirection: 'row', gap: 8, paddingRight: 20 },
   tab:        { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100, backgroundColor: C.bg2, borderWidth: 1.5, borderColor: C.line },
   tabActive:  { backgroundColor: C.dark, borderColor: C.dark },
+  tabInner:   { flexDirection: 'row', alignItems: 'center', gap: 5 },
   tabText:    { fontSize: 12, fontWeight: '600', color: C.sub },
   tabTextActive: { color: '#fff' },
+  // Something to claim: on a chip and on the Ready tile, as on the tab icon.
+  dot:        { width: 6, height: 6, borderRadius: 3, backgroundColor: C.red },
 
-  grid:            { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  badgeCard:       { width: '47.5%', backgroundColor: C.card, borderRadius: 22, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: C.line, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  badgeCardLocked: { backgroundColor: C.bg2, borderColor: C.bg3, opacity: 0.65 },
-  rarityLabel:     { fontSize: 8, fontWeight: '800', letterSpacing: 0.8, alignSelf: 'flex-end', marginBottom: 8 },
-  badgeEmoji:      { width: 60, height: 60, borderRadius: 30, backgroundColor: C.amberBg, borderWidth: 1.5, borderColor: `${C.amber}33`, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  badgeEmojiLocked:{ backgroundColor: C.bg3, borderColor: C.bg3 },
-  countPill:       { position: 'absolute', top: -6, right: -6, backgroundColor: C.dark, borderRadius: 100, paddingHorizontal: 6, paddingVertical: 2, minWidth: 22, alignItems: 'center', borderWidth: 2, borderColor: C.card },
-  countPillText:   { fontSize: 10, color: '#fff', fontWeight: '800' },
-  badgeName:       { fontSize: 13, fontWeight: '800', color: C.text, marginBottom: 4, textAlign: 'center' },
-  badgeDesc:       { fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 15, marginBottom: 10 },
-  earnedTag:       { backgroundColor: C.amberBg, borderWidth: 1, borderColor: `${C.amber}33`, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100, marginBottom: 8 },
-  earnedTagText:   { fontSize: 10, fontWeight: '700', color: C.amber },
-  lockedTag:       { backgroundColor: C.bg3, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
-  lockedTagText:   { fontSize: 10, color: C.muted },
-  mintBtn:         { marginTop: 8, backgroundColor: C.dark, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
-  mintBtnDisabled: { backgroundColor: C.muted },
-  mintBtnText:     { fontSize: 10, fontWeight: '700', color: C.amber2 },
-  mintedTag:       { marginTop: 8, backgroundColor: `${C.amber}22`, borderWidth: 1, borderColor: `${C.amber}44`, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
-  mintedTagText:   { fontSize: 10, fontWeight: '700', color: C.amber2 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
 
   modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox:            { backgroundColor: C.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 40, alignItems: 'center' },

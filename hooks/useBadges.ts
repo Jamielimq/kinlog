@@ -86,11 +86,13 @@ export function useBadges(address: string | null) {
 
   // Subscription 1: badges/{badgeId} — earned/minted state
   useEffect(() => {
+    // Nothing from the previous wallet shows while the new one's badges are read.
+    setEarnedMap({});
     if (!address) {
-      setEarnedMap({});
       setLoading(false);
       return;
     }
+    setLoading(true);
     const db = getFirestore(getApp());
     const badgesRef = collection(db, 'users', address, 'badges');
     const unsub = onSnapshot(badgesRef, (snap: FirebaseFirestoreTypes.QuerySnapshot) => {
@@ -112,10 +114,8 @@ export function useBadges(address: string | null) {
 
   // Subscription 2: userChallenges — derive claimed-instance count per challengeId
   useEffect(() => {
-    if (!address) {
-      setInstanceCounts({});
-      return;
-    }
+    setInstanceCounts({});
+    if (!address) return;
     const db = getFirestore(getApp());
     const ref = collection(db, 'users', address, 'userChallenges');
     const unsub = onSnapshot(ref, (snap: FirebaseFirestoreTypes.QuerySnapshot) => {

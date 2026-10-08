@@ -1,11 +1,12 @@
-// Claiming a monthly badge: 0.001 SOL to Kinlog's fee wallet plus a memo naming the badge and its
-// month, in one transaction sent with lib/lockedIn/tx.ts sendWithWallet (simulated before the wallet
-// opens, confirmed after). No on-chain badge is issued yet; the memo is the on-chain record of the claim.
+// Claiming a badge, whichever kind (lib/claims.ts): 0.001 SOL to Kinlog's fee wallet plus a memo naming
+// the badge (and its month or cohort), in one transaction sent with lib/lockedIn/tx.ts sendWithWallet
+// (simulated before the wallet opens, confirmed after). No on-chain badge is issued yet; the memo is
+// the on-chain record of the claim.
 import { type Connection, PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
 import { solShort, txFailure } from './lockedIn/reward';
 import { TxError } from './lockedIn/tx';
 
-/** Where the lifetime badges' claim fee goes too (app/(tabs)/badges.tsx TREASURY_WALLET). */
+/** The treasury that has always received the badge claim fee. */
 export const FEE_WALLET = new PublicKey('EyEohuV8fBXyNDZK9ZtYFNe6A6FfUw9ndSwBbtNqTxmJ');
 export const BADGE_FEE_LAMPORTS = 1_000_000; // 0.001 SOL
 const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
@@ -36,6 +37,18 @@ export async function sentState(connection: Connection, signature: string, lastV
   const again = await lookUp();
   return again ? judge(again) : 'expired';
 }
+
+/** Sent, and the outcome isn't known yet: the badge shows Checking until recheck settles it. */
+export const CLAIM_NOT_CONFIRMED = {
+  title: 'Not confirmed yet',
+  body: "Your claim was sent but isn't confirmed yet. Until Kinlog confirms it, the badge shows Checking. If it doesn't go through, you can claim it again.",
+};
+
+/** Confirmed on chain, and the record couldn't be written yet: recheck keeps trying. */
+export const CLAIM_NOT_SAVED = {
+  title: 'Claim not saved yet',
+  body: "Your claim went through, but it couldn't be saved yet. The badge shows as claimed while Kinlog keeps trying to save it.",
+};
 
 /** The popup for a claim that didn't go through. Not for a cancel in the wallet, which shows nothing. */
 export function badgeClaimAlert(e: unknown): { title: string; body: string } {

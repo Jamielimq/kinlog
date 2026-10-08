@@ -1,14 +1,11 @@
-// Monthly badge claims whose payment the wallet has sent but the app hasn't recorded yet, kept on the
-// phone per wallet (expo-secure-store), so a payment that went through is recorded later instead of
-// paid again. Each is removed once recorded, or once the chain shows it failed or can no longer land.
+// Badge claims whose payment the wallet has sent but the app hasn't recorded yet, kept on the phone per
+// wallet (expo-secure-store), so a payment that went through is recorded later instead of paid again.
+// Each is removed once recorded, or once the chain shows it failed or can no longer land.
 import * as SecureStore from 'expo-secure-store';
-import type { MonthKey, MonthlyType } from './record';
+import { type ClaimItem, monthlyClaim } from './claims';
+import { MONTHLY_BADGES } from './record';
 
-export interface PendingClaim {
-  id: string; // the badge record's id, month_<type>_<YYYYMM>
-  type: MonthlyType;
-  month: MonthKey;
-  memo: string;
+export interface PendingClaim extends ClaimItem {
   signature: string;
   lastValidBlockHeight: number; // past this block height, a transaction that hasn't landed never will
   sentAt: number;
@@ -24,11 +21,19 @@ function serial<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/** An entry as saved before claims covered every badge kind (monthly only: type and month, no kind). */
+function upgrade(x: any): PendingClaim | null {
+  if (x?.kind) return x as PendingClaim;
+  const badge = MONTHLY_BADGES.find(b => b.type === x?.type);
+  if (!badge || typeof x?.month !== 'string' || typeof x?.signature !== 'string') return null;
+  return { ...monthlyClaim(badge, x.month), signature: x.signature, lastValidBlockHeight: x.lastValidBlockHeight ?? 0, sentAt: x.sentAt ?? 0 };
+}
+
 async function read(wallet: string): Promise<PendingClaim[]> {
   try {
     const raw = await SecureStore.getItemAsync(keyOf(wallet));
     const list: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? (list as PendingClaim[]) : [];
+    return Array.isArray(list) ? list.map(upgrade).filter((p): p is PendingClaim => p !== null) : [];
   } catch (e: any) {
     console.log('pending claims read failed:', e?.message ?? e);
     return [];

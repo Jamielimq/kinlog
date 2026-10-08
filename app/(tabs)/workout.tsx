@@ -238,114 +238,12 @@ function jointsPlausible(m: SideMeasurement): boolean {
   return true
 }
 
-// --- POSE DEBUG BEGIN (calibration only — remove this whole block, see plan Phase 3) ---
-// Explicit constant rather than __DEV__: these numbers have to be read off a release APK.
-const POSE_DEBUG = true
-// Frame capture is OFF by design, not merely unused: the workout screen tells the user
-// "This video is not recorded or saved", and writing per-rep JPEGs to the device would
-// contradict that. It stays behind this flag so calibration can turn it back on
-// deliberately, on a build that is not shipped. Logging above is unaffected.
-const POSE_DEBUG_FRAMES = false
-// MediaPipe RunningMode.VIDEO (tracking between frames) vs IMAGE (stateless per frame).
-// Flip to compare cadence; the session summary reports the stage breakdown either way.
+// MediaPipe RunningMode.VIDEO: tracking carries over between frames, so the person detector
+// re-runs only when tracking is lost (IMAGE runs it on every frame).
 const POSE_VIDEO_MODE = true
 
+// Why a frame is excluded from judgement.
 type RejectReason = 'nopose' | 'lowvis' | 'order'
-
-type PoseStats = {
-  frames: number; ok: number; nopose: number; lowvis: number; order: number
-  dts: number[]; snaps: number[]; decodes: number[]; infers: number[]
-  repLatencies: number[]; hipDrops: number[]
-  img: string | null
-}
-const emptyPoseStats = (): PoseStats => ({
-  frames: 0, ok: 0, nopose: 0, lowvis: 0, order: 0,
-  dts: [], snaps: [], decodes: [], infers: [], repLatencies: [], hipDrops: [], img: null,
-})
-
-type StageTimes = { snap: number; decode?: number; infer?: number }
-
-function logPoseFrame(
-  stats: PoseStats,
-  dt: number,
-  t: StageTimes,
-  m: SideMeasurement | null,
-  phase: 'up' | 'down',
-  hipDrop?: number | null,
-  torso?: number | null,
-  reject?: RejectReason | null,
-) {
-  if (!POSE_DEBUG) return
-  stats.frames += 1
-  if (dt > 0) stats.dts.push(dt)
-  stats.snaps.push(t.snap)
-  if (t.decode !== undefined) stats.decodes.push(t.decode)
-  if (t.infer !== undefined) stats.infers.push(t.infer)
-  // Whatever dt is not accounted for by these three is bridge + file I/O + JS overhead.
-  const stage =
-    `snap=${Math.round(t.snap)} dec=${t.decode !== undefined ? Math.round(t.decode) : '-'} ` +
-    `inf=${t.infer !== undefined ? Math.round(t.infer) : '-'}`
-  if (reject === 'nopose' || !m) {
-    stats.nopose += 1
-    console.log(`[POSE] dt=${dt} ${stage} REJECT=nopose`)
-  } else if (reject === 'lowvis') {
-    stats.lowvis += 1
-    console.log(`[POSE] dt=${dt} ${stage} REJECT=lowvis vis=${m.minVis.toFixed(2)} leg=${m.leg}`)
-  } else if (reject === 'order') {
-    stats.order += 1
-    const f3 = (n: number) => n.toFixed(3)
-    console.log(
-      `[POSE] dt=${dt} ${stage} REJECT=order leg=${m.leg} vis=${m.minVis.toFixed(2)} ` +
-      `sh=${m.shoulder ? f3(m.shoulder.y) : 'n/a'} hip=${f3(m.hip.y)} knee=${f3(m.knee.y)} ankle=${f3(m.ankle.y)}`
-    )
-  } else {
-    stats.ok += 1
-    // hipdrop is the whole point of the next calibration pass: read the MINIMUM across
-    // real squats and the MAXIMUM across knee raises to settle HIP_DROP_RATIO.
-    const hd = hipDrop === null || hipDrop === undefined ? 'n/a' : `${(hipDrop * 100).toFixed(0)}%`
-    const tl = torso === null || torso === undefined ? 'n/a' : torso.toFixed(3)
-    if (hipDrop !== null && hipDrop !== undefined) stats.hipDrops.push(hipDrop)
-    console.log(
-      `[POSE] dt=${dt} ${stage} raw=${m.angle} hipdrop=${hd} torso=${tl} ` +
-      `vis=${m.minVis.toFixed(2)} leg=${m.leg} phase=${phase}`
-    )
-  }
-}
-
-function logPoseSession(stats: PoseStats, reps: number) {
-  if (!POSE_DEBUG) return
-  const d = [...stats.dts].sort((a, b) => a - b)
-  const at = (q: number) => (d.length ? d[Math.min(d.length - 1, Math.floor(d.length * q))] : 0)
-  const avg = d.length ? Math.round(d.reduce((sum, v) => sum + v, 0) / d.length) : 0
-  const lowvisPct = stats.frames ? ((stats.lowvis / stats.frames) * 100).toFixed(1) : '0.0'
-  const mean = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0)
-  const snap = mean(stats.snaps), dec = mean(stats.decodes), inf = mean(stats.infers)
-  console.log(
-    `[POSE] session frames=${stats.frames} ok=${stats.ok} nopose=${stats.nopose} ` +
-    `lowvis=${stats.lowvis} (${lowvisPct}%) order=${stats.order} dt avg=${avg} p50=${at(0.5)} p95=${at(0.95)} ` +
-    `max=${d.length ? d[d.length - 1] : 0} reps=${reps}`
-  )
-  console.log(
-    `[POSE] session stages mode=${POSE_VIDEO_MODE ? 'VIDEO' : 'IMAGE'} ` +
-    `snap=${snap} decode=${dec} infer=${inf} other=${Math.max(0, avg - snap - dec - inf)} ` +
-    `(avg ms of dt=${avg}) img=${stats.img ?? 'n/a'}`
-  )
-  const hd = [...stats.hipDrops].sort((a, b) => a - b)
-  const pc = (v: number) => `${(v * 100).toFixed(0)}%`
-  console.log(
-    `[POSE] session hipdrop n=${hd.length} ` +
-    `min=${hd.length ? pc(hd[0]) : 'n/a'} ` +
-    `p50=${hd.length ? pc(hd[Math.floor(hd.length / 2)]) : 'n/a'} ` +
-    `max=${hd.length ? pc(hd[hd.length - 1]) : 'n/a'} (gate=${pc(HIP_DROP_RATIO)})`
-  )
-  const rl = [...stats.repLatencies].sort((a, b) => a - b)
-  console.log(
-    `[POSE] session stood-up->counted n=${rl.length} ` +
-    `median=${rl.length ? rl[Math.floor(rl.length / 2)] : 0} ` +
-    `min=${rl.length ? rl[0] : 0} max=${rl.length ? rl[rl.length - 1] : 0} ms`
-  )
-}
-// --- POSE DEBUG END ---
 
 export default function WorkoutScreen() {
   // Keep screen awake during workout
@@ -383,20 +281,13 @@ export default function WorkoutScreen() {
   // reference. Torso length is taken from that same frame — the most upright one.
   const standSamplesRef = useRef<{ t: number; hipY: number; torso: number | null }[]>([])
   const baselineRef = useRef<{ hipY: number; torso: number | null } | null>(null)
-  const lastFrameAtRef = useRef<number | null>(null)
-  const roseAtRef = useRef<number | null>(null)
-  const poseStatsRef = useRef(emptyPoseStats())
-  const deepestRef = useRef<{ path: string | null; m: SideMeasurement; drop: number | null } | null>(null)
-  const attemptDeepestRef = useRef<number | null>(null)
-  const skipCountRef = useRef(0)
-  const debugDirRef = useRef<string | null>(null)
 
   const { publicKey, dataAddress, session, signIn, signInError, awaitingSignIn } = useWallet()
   // Workouts are saved only with the wallet's own sign-in, so a connected wallet without one signs
   // in before it can start (a session with no wallet at all is still allowed, unsaved).
   const address = dataAddress
   const needsSignIn = publicKey !== null && address === null
-  const { initialized: poseReady, detect, getDebugDir, saveDebugFrame } = usePoseLandmarker(POSE_VIDEO_MODE)
+  const { initialized: poseReady, detect } = usePoseLandmarker(POSE_VIDEO_MODE)
 
   useEffect(() => {
     isActiveRef.current = isActive
@@ -407,23 +298,6 @@ export default function WorkoutScreen() {
     setIsActive(false)
     setTrackingLost(false)
     clearInterval(timerRef.current!)
-    logPoseSession(poseStatsRef.current, repsRef.current)
-    // Leak check: the loop deletes every snapshot in its finally block, so this should
-    // read 0. Internal cache is unreadable over adb on a release build, so the app has
-    // to report it. Counted on a delay because a detection is usually still awaiting
-    // when Stop is pressed, and its finally has not run yet — counting immediately
-    // always finds that one in-flight frame and looks like a leak. Goes away with the
-    // POSE DEBUG block.
-    if (POSE_DEBUG) {
-      setTimeout(() => {
-        try {
-          const sd = new Directory(Paths.cache, SNAPSHOT_DIR)
-          console.log(`[POSE] session snapshot cache: ${sd.exists ? sd.list().length : 0} file(s) left`)
-        } catch (e) {
-          console.log('[POSE] snapshot cache check failed:', String(e))
-        }
-      }, 1500)
-    }
     const completedReps = repsRef.current
     const completedElapsed = Math.round((Date.now() - startedAtRef.current) / 1000)
     if (completedReps > 0 && address) {
@@ -474,17 +348,7 @@ export default function WorkoutScreen() {
       // Fall back to the camera's default cache dir; per-frame deletion still runs.
       snapshotDirRef.current = null
     }
-    // --- POSE DEBUG (calibration only - remove with the debug block) ---
-    if (POSE_DEBUG && POSE_DEBUG_FRAMES) {
-      getDebugDir().then(d => {
-        debugDirRef.current = d
-        console.log(`[POSE] debug frame dir: ${d ?? 'unavailable'}`)
-      })
-    }
-    // --- END POSE DEBUG ---
-    // Mount-only on purpose: the snapshot dir is resolved once per screen, and
-    // getDebugDir is debug-only (it goes away with the POSE DEBUG block).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount-only: the snapshot dir is resolved once per screen.
   }, [])
 
   // Pose detection loop using camera snapshots
@@ -495,30 +359,19 @@ export default function WorkoutScreen() {
       if (detectingRef.current || !cameraRef.current) return
       detectingRef.current = true
 
-      // Measured tick-to-tick, because snapshot + inference latency makes the real
-      // cadence longer and less regular than this interval's nominal 100 ms.
       const now = Date.now()
-      const dt = lastFrameAtRef.current === null ? 0 : now - lastFrameAtRef.current
-      lastFrameAtRef.current = now
 
       let snapshotPath: string | null = null
-      let keepSnapshot = false
       try {
         const dir = snapshotDirRef.current
-        const tSnapStart = Date.now()
         const photo = await cameraRef.current.takeSnapshot(
           dir ? { quality: 30, path: dir } : { quality: 30 }
         )
-        const tSnap = Date.now() - tSnapStart
         if (!photo?.path) return
         snapshotPath = photo.path
 
         const landmarks = await detect('file://' + photo.path)
         const measured = landmarks ? measureSide(landmarks) : null
-        const stages = { snap: tSnap, decode: landmarks?.decodeMs, infer: landmarks?.inferMs }
-        if (landmarks?.imgW && poseStatsRef.current.img === null) {
-          poseStatsRef.current.img = `${landmarks.imgW}x${landmarks.imgH}/s${landmarks.sample}`
-        }
 
         // Frame excluded: no pose at all, or the measured leg's weakest joint is
         // below the confidence floor. Drop it rather than let it move the state machine.
@@ -537,7 +390,6 @@ export default function WorkoutScreen() {
             setSessionDetected(false)
           }
           // setAngle is not called, so the readout holds its last measured value.
-          logPoseFrame(poseStatsRef.current, dt, stages, measured, phaseRef.current, null, null, reject)
           return
         }
 
@@ -577,27 +429,6 @@ export default function WorkoutScreen() {
             ? (measured!.hip.y - base.hipY) / base.torso
             : null
 
-        // Keep the deepest frame of the current rep so its landmarks can be checked
-        // against the photo. Only frames already near the bottom are considered.
-        if (POSE_DEBUG && measured!.angle <= 130) {
-          const cur = deepestRef.current
-          if (cur === null || measured!.angle < cur.m.angle) {
-            if (cur?.path) { try { new File('file://' + cur.path).delete() } catch {} }
-            // Without frame capture we still track the measurement for the log line,
-            // but the snapshot is left to the normal per-frame delete.
-            deepestRef.current = {
-              path: POSE_DEBUG_FRAMES ? snapshotPath : null,
-              m: measured!, drop: hipDropRatio,
-            }
-            if (POSE_DEBUG_FRAMES) keepSnapshot = true
-          }
-        }
-        // An attempt that never became a rep is released once the knee straightens
-        // again, so a rejected knee raise still leaves a photo to inspect.
-        if (POSE_DEBUG && val > 130 && phaseRef.current === 'up' && deepestRef.current) {
-          releaseAttempt('skip')
-        }
-
         if (phaseRef.current === 'up') {
           // Knee angle alone cannot tell a squat from a knee raise. When torso length
           // is unavailable the hip term is skipped rather than blocking the rep —
@@ -605,30 +436,18 @@ export default function WorkoutScreen() {
           const hipOk = hipDropRatio === null || hipDropRatio >= HIP_DROP_RATIO
           if (val <= KNEE_DOWN && hipOk) {
             phaseRef.current = 'down'; setPhase('down')
-            roseAtRef.current = null
-          } else if (val <= KNEE_DOWN && POSE_DEBUG) {
-            // Rejected purely by the hip term — the case this gate exists for.
-            releaseAttempt('skip')
           }
         } else {
           if (val >= KNEE_UP) {
-            // Stamped and consumed on the same frame, so this reads ~0 by construction.
-            // It stays in the summary as the measured cost of the judgement itself.
-            roseAtRef.current = now
             phaseRef.current = 'up'; setPhase('up')
             repsRef.current += 1; setReps(repsRef.current)
-            poseStatsRef.current.repLatencies.push(now - roseAtRef.current)
-            roseAtRef.current = null
-            if (POSE_DEBUG) releaseAttempt('rep', repsRef.current)
             if (repsRef.current >= TARGET) stopSession()
           }
         }
-
-        logPoseFrame(poseStatsRef.current, dt, stages, measured, phaseRef.current, hipDropRatio, base?.torso ?? null, null)
       } catch (e) {
         // Ignore snapshot errors
       } finally {
-        if (snapshotPath && !keepSnapshot) {
+        if (snapshotPath) {
           try { new File('file://' + snapshotPath).delete() } catch {}
         }
         detectingRef.current = false
@@ -706,53 +525,10 @@ export default function WorkoutScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, poseReady, isFocused])
 
-  // --- POSE DEBUG (calibration only - remove with the debug block) ---
-  // Moves the deepest frame of the rep just counted into the external debug dir and
-  // logs the landmarks that produced its angle, so the number can be checked against
-  // the actual photo. adb pull the directory printed on session start.
-  // kind 'rep'  — the attempt was counted
-  // kind 'skip' — the knee reached 110 but the hip did not drop far enough, or the
-  //               descent was abandoned. Both are saved: verifying that a knee raise
-  //               is rejected needs the rejected frame, not just the accepted ones.
-  const releaseAttempt = (kind: 'rep' | 'skip', repNo?: number) => {
-    const d = deepestRef.current
-    deepestRef.current = null
-    if (!d) return
-    const { m } = d
-    const f2 = (n: number) => n.toFixed(4)
-    const seq = kind === 'rep' ? (repNo ?? 0) : (skipCountRef.current += 1)
-    const drop = d.drop === null ? 'n/a' : `${(d.drop * 100).toFixed(0)}%`
-    console.log(
-      `[POSE] ${kind}=${seq} deepest angle=${m.angle} leg=${m.leg} hipdrop=${drop} ` +
-      `hip=(${f2(m.hip.x)},${f2(m.hip.y)},v${m.hip.visibility.toFixed(2)}) ` +
-      `knee=(${f2(m.knee.x)},${f2(m.knee.y)},v${m.knee.visibility.toFixed(2)}) ` +
-      `ankle=(${f2(m.ankle.x)},${f2(m.ankle.y)},v${m.ankle.visibility.toFixed(2)}) ` +
-      `shoulder=${m.shoulder ? `(${f2(m.shoulder.x)},${f2(m.shoulder.y)},v${m.shoulder.visibility.toFixed(2)})` : 'not visible'}`
-    )
-    if (!d.path) return
-    const name = `${kind}${String(seq).padStart(2, '0')}_${m.angle}deg_drop${d.drop === null ? 'na' : Math.round(d.drop * 100)}.jpg`
-    const src = d.path
-    saveDebugFrame(src, name).then(saved => {
-      if (!saved) {
-        console.log('[POSE] frame save failed for', name)
-        try { new File('file://' + src).delete() } catch {}
-      }
-    })
-  }
-  // --- END POSE DEBUG ---
-
   const resetJudgement = () => {
     lostSinceRef.current = null
     standSamplesRef.current = []
     baselineRef.current = null
-    attemptDeepestRef.current = null
-    lastFrameAtRef.current = null
-    roseAtRef.current = null
-    poseStatsRef.current = emptyPoseStats()
-    if (deepestRef.current?.path) {
-      try { new File('file://' + deepestRef.current.path).delete() } catch {}
-    }
-    deepestRef.current = null
     setTrackingLost(false)
   }
 

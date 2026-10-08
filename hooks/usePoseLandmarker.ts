@@ -14,13 +14,6 @@ export interface PoseLandmarks {
   rightKnee: { x: number; y: number; z: number; visibility: number }
   leftAnkle: { x: number; y: number; z: number; visibility: number }
   rightAnkle: { x: number; y: number; z: number; visibility: number }
-  // --- POSE DEBUG (calibration only - removed with the debug block) ---
-  decodeMs?: number
-  inferMs?: number
-  imgW?: number
-  imgH?: number
-  sample?: number
-  // --- END POSE DEBUG ---
 }
 
 // Calculate angle between 3 points
@@ -60,23 +53,5 @@ export function usePoseLandmarker(videoMode: boolean = false) {
     }
   }
 
-  // --- POSE DEBUG (calibration only - removed with the debug block) ---
-  const getDebugDir = async (): Promise<string | null> => {
-    try {
-      return await PoseLandmarker?.getDebugDir()
-    } catch {
-      return null
-    }
-  }
-
-  const saveDebugFrame = async (srcPath: string, destName: string): Promise<string | null> => {
-    try {
-      return await PoseLandmarker?.saveDebugFrame(srcPath, destName)
-    } catch {
-      return null
-    }
-  }
-  // --- END POSE DEBUG ---
-
-  return { initialized, error, detect, getDebugDir, saveDebugFrame }
+  return { initialized, error, detect }
 }

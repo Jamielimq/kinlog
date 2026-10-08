@@ -5,10 +5,9 @@ the daily workout record, badge issuance, SKR staking verification, MWA transact
 Every claim below is a description of code as it exists today, with `file:line` citations so you can jump
 straight to the source instead of re-deriving it.
 
-Accurate as of app version **1.3.3** (`versionCode 9`, `android/app/build.gradle:95-96`). Section 1 reflects
-the Phase 1 squat-judgement rework (EMA smoothing, 3-frame confirmation, confidence gate, side-view-only
-capture, snapshot cleanup); `versionCode` was deliberately **not** bumped, as no store release is being cut
-for it.
+Section 1 matches app version **1.4.0** (`versionCode 10`, `android/app/build.gradle:95-96`): the squat judgement
+as settled in September and October 2026, with the calibration instrumentation removed. The other sections still
+describe 1.3.3 (`versionCode 9`) until they are revised.
 Companion documents: `CLAUDE.md` (working rules and settled product decisions), `README.md` (product overview).
 
 | Section | Primary files |
@@ -27,110 +26,128 @@ Companion documents: `CLAUDE.md` (working rules and settled product decisions), 
 
 ### Pipeline
 
-Detection runs on **camera snapshots, not the frame processor**. `useFrameProcessor` is declared at
-`app/(tabs)/workout.tsx:232-234` as an empty worklet and is never passed to `<Camera>`.
+Detection runs on **camera snapshots, not the frame processor**: `useFrameProcessor` in `app/(tabs)/workout.tsx`
+is an empty worklet that is never passed to `<Camera>`.
 
-The loop lives at `app/(tabs)/workout.tsx:240-274`:
+The session loop (the detection effect in `workout.tsx`):
 
-1. `setInterval` every **100 ms** (`:271`).
-2. `detectingRef` guard (`:236`, `:244-245`) skips a tick while a previous detection is still in flight;
-   the `finally` at `:268-270` always clears it.
-3. `cameraRef.current.takeSnapshot({ quality: 30, path })` writes a JPEG into `<cache>/kinlog-snapshots`,
-   a directory the app owns.
+1. `setInterval` every **100 ms**, nominal; the measured cadence is about four frames a second (see
+   [Measured on device](#measured-on-device)).
+2. A `detectingRef` guard skips a tick while the previous detection is still in flight; `finally` always clears it.
+3. `cameraRef.current.takeSnapshot({ quality: 30, path })` writes a JPEG into `<cache>/kinlog-snapshots`, a
+   directory the app owns.
 4. `detect('file://' + photo.path)` crosses the bridge to the native module.
-5. The returned landmarks are converted to one knee angle, smoothed, gated on confidence, and
-   then drive the state machine.
-6. The `finally` block deletes that JPEG. A sweep of the same directory on screen mount reclaims
-   files left by a session that never reached its `finally` (crash, force-close).
+5. The landmarks become one knee angle on the better-seen leg, are checked for confidence and plausibility, and
+   drive the state machine.
+6. `finally` deletes the JPEG. Entering the screen sweeps the directory once, reclaiming files a crashed or
+   force-closed session left behind.
 
-`catch` at `:266-267` swallows all errors silently (snapshot failure, decode failure, native rejection).
+The loop's `catch` skips a frame silently on any error (snapshot, decode, native rejection).
+
+Before a session, a lighter preview loop (every `PREVIEW_INTERVAL_MS`, 400 ms) applies the same acceptance test to
+drive the Live / Not detected badge and auto start. It touches no judgement state and shares `detectingRef`, so it
+never overlaps a session frame.
 
 ### JS bridge — `hooks/usePoseLandmarker.ts`
 
-- `usePoseLandmarker()` calls `PoseLandmarker.initialize()` on mount and `release()` on unmount (`:33-41`).
-- `detect(...)` returns `null` when uninitialized and swallows native rejections (`:43-50`). Note the parameter
-  is named `base64Image` (`:43`) but the value passed is a **file path**.
-- `calcAngle(a, b, c)` (`:18-27`) is a pure 2D interior-angle helper in degrees, already rounded. `z` is ignored.
-- `PoseLandmarks` (`:8-15`) exposes exactly six named joints, each `{ x, y, z, visibility }`.
+- `usePoseLandmarker(videoMode)` initializes the native module on mount and releases it on unmount. The workout
+  screen passes `POSE_VIDEO_MODE` (`true`).
+- `detect(path)` returns `null` when the module isn't initialized or the native call rejects.
+- `calcAngle(a, b, c)` is a pure 2D interior angle in degrees, rounded. `z` is ignored.
+- `PoseLandmarks` carries eight joints, each `{ x, y, z, visibility }`: shoulders, hips, knees and ankles.
 
 ### Native module — `android/app/src/main/java/com/kinlog/app/PoseLandmarkerModule.kt`
 
-- Module name `"PoseLandmarker"` (`:16`), registered by `PoseLandmarkerPackage.kt:9-12` via `MainApplication.kt`.
-- `RunningMode.IMAGE`, `setNumPoses(1)`, model asset `pose_landmarker_lite.task` (`:21-31`). No custom
-  detection/presence/tracking confidence is set, so MediaPipe defaults apply.
-- Preprocessing (`:46-53`): strip `file://` → `BitmapFactory.decodeFile` → `BitmapImageBuilder`. There is **no
-  rotation, EXIF, mirror, or resize handling**, and `lm.detect()` runs synchronously on the native-modules thread.
-- Empty result → `promise.resolve(null)` (`:56-59`), which the JS loop skips on.
-- Returns **only landmark indices 23–28** (`:61-83`): `leftHip` 23, `rightHip` 24, `leftKnee` 25, `rightKnee` 26,
-  `leftAnkle` 27, `rightAnkle` 28. Coordinates are normalized to the image (`y` grows downward).
-- **`z` is hard-coded to `0.0`** (`:69`) — every angle in the app is a 2D image-plane angle.
-- `visibility` is the real MediaPipe value, defaulting to `0.0` when absent (`:70-75`).
-- `release()` (`:91-95`) only nulls the reference; it never calls `close()` on the MediaPipe graph.
-- Gradle dependency: `com.google.mediapipe:tasks-vision:0.10.14` (`android/app/build.gradle:183`).
+- Module `"PoseLandmarker"`, registered by `PoseLandmarkerPackage` in `MainApplication.kt`. Model asset
+  `pose_landmarker_lite.task`, `setNumPoses(1)`, MediaPipe's default detection, presence and tracking confidences.
+- The running mode is chosen at `initialize(videoMode)`. `RunningMode.VIDEO` keeps tracking state between frames, so
+  the person detector re-runs only when tracking is lost; `detectForVideo` gets strictly increasing timestamps.
+- `detectPose(path)` decodes the JPEG downscaled with `inSampleSize`, keeping the short edge at 480 px or more (the
+  graph resizes to 256×256 internally anyway), and recycles the bitmap and the MediaPipe image as soon as inference
+  is done. There is no rotation, EXIF or mirror handling.
+- No pose → `null`. Otherwise eight landmarks: shoulders 11/12, hips 23/24, knees 25/26, ankles 27/28. Coordinates
+  are normalized to the image (`y` grows downward); `z` is hard-coded to `0.0`, so every angle is an image-plane
+  angle; `visibility` is MediaPipe's own, `0.0` when absent.
+- Gradle dependency: `com.google.mediapipe:tasks-vision:0.10.14` (`android/app/build.gradle`).
 
-### Angle computation and confidence gate
+### Judgement — `app/(tabs)/workout.tsx`
 
-**Side view is the only supported capture.** The `side`/`front` toggle was removed; the UI now states the
-requirement ("Stand sideways to the camera") instead of offering a choice.
+**Side view is the only supported capture.** `measureSide` picks the leg with the higher summed hip, knee and ankle
+visibility (a tie goes to the left) and returns its knee angle, its joints, the same-side shoulder when that is at
+least `MIN_VISIBILITY`, and `minVis`, the weakest of the leg's three joint confidences.
 
-`measureSide(landmarks)` sums `visibility` of hip+knee+ankle per leg and measures the higher-scoring leg
-(`>=` still ties to the left). It returns `{ angle, leg, minVis }`, where `minVis` is the **weakest** of that
-leg's three joint confidences — reported rather than pre-filtered, so the caller can both gate on it and log it.
+A frame is **excluded from judgement** (the angle readout holds its last value and the phase is kept, since tracking
+can drop mid-squat) when there is no pose, when `minVis < MIN_VISIBILITY`, or when `jointsPlausible` fails: the
+shoulder below the hip, or the hip or knee below the ankle, by more than `ORDER_TOLERANCE`. Hip below knee is a
+legitimate deep squat and is not checked. After `TRACKING_WARN_MS` of continuous exclusion the phase badge shows the
+tracking warning, so a stalled counter always has a visible reason.
 
-A frame is **excluded from judgement** when the native module returns no pose, or when `minVis < MIN_VISIBILITY`.
-On exclusion the EMA and both streak counters reset, `phaseRef` is **preserved** (tracking can drop mid-squat),
-and `setAngle` is not called, so the on-screen readout holds its last measured value rather than blanking.
+**Standing baseline.** A frame with the knee at `KNEE_UP` or more is kept for `STAND_WINDOW_MS` when its torso
+(`|shoulder.y − hip.y|`) is at least `TORSO_MIN`. The baseline is the kept sample with the highest hip (smallest `y`),
+and its torso is the torso length. Nothing updates while the knee is bent, so the baseline freezes during a descent.
 
-Note that `useCameraDevice('front')` selects the **physical selfie camera** — it is unrelated to the
-removed front/side judgement mode, and is unchanged.
-
-### State machine and thresholds
-
-The comparison runs on the **EMA-smoothed** angle, never the raw frame angle, and each transition
-requires `CONFIRM_FRAMES` consecutive qualifying frames.
+**State machine**, on the raw angle of a single frame, with no smoothing and no multi-frame confirmation:
 
 ```
-up   --(ema <= 110, 3 consecutive frames)--> down
-down --(ema >= 150, 3 consecutive frames)-->  up   [+1 rep]
+up   --(knee <= 110° and hip drop >= 20% of torso)--> down
+down --(knee >= 150°)-->                                up   [+1 rep]
 ```
+
+When the torso length can't be measured (no baseline yet, or the shoulder not confidently visible) the hip term is
+skipped and the knee angle alone decides: a missed rep is the worse error (`CLAUDE.md`, judgement principle).
+Reaching `TARGET` stops the session.
 
 | Constant | Value | Notes |
 |---|---|---|
-| Down threshold | `KNEE_DOWN = 110` | `ema <= 110` |
-| Up threshold | `KNEE_UP = 150` | `ema >= 150` |
-| Smoothing | `EMA_ALPHA = 0.4` | seeded from the first good frame, so it never climbs down from 180 |
-| Transition confirmation | `CONFIRM_FRAMES = 3` | applies to **both** directions; both counters clear on a flip |
-| Confidence floor | `MIN_VISIBILITY = 0.5` | per joint, on the measured leg |
-| Tracking warning delay | `TRACKING_WARN_MS = 1000` | debounce, so brief dropouts do not flash a banner |
-| Detection interval | `100` ms | nominal; see the cadence note in Appendix A |
-| Snapshot quality | `30` | written to `<cache>/kinlog-snapshots`, deleted per frame |
-| Daily target / auto-stop | `TARGET = 30` | |
-| Points per rep | `POINTS_PER_REP = 5` | |
+| `KNEE_DOWN` | 110° | raw knee angle for `up → down` |
+| `KNEE_UP` | 150° | raw knee angle for `down → up`, one rep |
+| `HIP_DROP_RATIO` | 0.20 | hip descent as a fraction of the baseline torso, `up → down` only |
+| `MIN_VISIBILITY` | 0.5 | weakest joint of the measured leg; also the shoulder's floor |
+| `ORDER_TOLERANCE` | 0.03 | normalized `y` slack in the joint-order check |
+| `TORSO_MIN` | 0.15 | shortest torso a standing sample may have to become the baseline |
+| `STAND_WINDOW_MS` | 5000 ms | how long a standing sample stays eligible |
+| `TRACKING_WARN_MS` | 1000 ms | continuous exclusion before the warning |
+| Session loop | 100 ms | nominal interval; measured cadence below |
+| `PREVIEW_INTERVAL_MS` | 400 ms | badge and auto-start checks before a session |
+| `AUTO_START_HOLD_MS` | 0 ms | standing time before auto start: the first standing frame |
+| Snapshot quality | 30 | JPEG in `<cache>/kinlog-snapshots`, deleted per frame |
+| `TARGET` | 30 | daily target and auto stop |
+| `POINTS_PER_REP` | 5 | |
 
-One `up → down → up` cycle is one rep (`:259-264`). Reaching `TARGET` calls `stopSession()` from inside the
-interval callback. Session lifecycle: `startSession` (`:276-280`), `stopSession` (`:208-230`),
-`resetSession` (`:282-288`); the screen is held awake by `useKeepAwake()` (`:177`).
+The 110° / 150° values are clinical PT calibration (`CLAUDE.md`, Product Decisions): coordinate before changing them.
 
-The `Product Decisions — DO NOT` section of `CLAUDE.md` pins the 110° / 150° values as clinical PT
-calibration — coordinate before changing them.
+### Measured on device
+
+From the calibration instrumentation (a `[POSE]` log line per frame and a summary per session), removed in 1.4.0.
+Solana Seeker, release builds, VIDEO mode, side view, 30 reps each.
+
+| Session | Frames | Accepted | Excluded | Frame interval | Stages |
+|---|---|---|---|---|---|
+| 2026-10-04 | 334 | 317 | 13 low confidence (3.9%), 4 no pose | avg 238 ms, p50 234, p95 251, max 366 (about 4.2 fps) | snapshot 116, decode 18, inference 66, other 38 ms |
+| 2026-10-06 | 314 | 314 | none | avg 234 ms | not recorded |
+
+- The decoded frame was 600×847.
+- Hip drop per accepted frame over the 2026-10-04 session: median 15%, max 95% (gate 20%).
+- A rep counts on the frame the knee reaches 150°; the judgement adds no latency (measured 0 ms).
+
+Calibration evidence behind the constants (2026-09-22 to 09-24, same device):
+
+- **Hip term.** Knee angle alone counted 8 phantom reps in a standing-still set: lifting a foot bends that knee past
+  110°. The hip stayed at y≈0.54 for all 8 while the ankle rose from 0.91 to 0.74; a real squat moved the hip from
+  ≈0.54 to ≈0.73 with the ankle planted at ≈1.07.
+- **`TORSO_MIN`.** Across four clean sets the baseline torso never fell below 0.210; bad frames measured 0.030–0.141.
+- **`ORDER_TOLERANCE`.** The tightest slack at the bottom of a real squat was 0.068 (knee above ankle); scrambled
+  frames sat 0.045–0.209 the wrong way.
+- **No smoothing.** At about 4 fps an EMA at 0.4 shrank a real 66–178° swing to 89–155°, leaving 150° barely
+  reachable; a median of 3 kept the amplitude but merged two reps whenever the top lasted one frame; multi-frame
+  confirmation needs 6 or more qualifying frames per rep, while a 2 s rep supplies about 8.6.
 
 ### What the pipeline does not do
 
-Relevant to any further accuracy work, the following are still **absent**:
-
-- No standing baseline or reference pose. `setAngle(180)` on session start is UI initialization only.
-- No hip-descent, torso-length, or scale-normalization logic. Hips are used solely as the first vertex of the
-  knee angle.
-- No shoulder landmarks. Indices 11/12 are never requested by the native module, so torso length is not
-  computable from the current bridge output. (Planned: Phase 2.)
-- `z` is hard-coded to `0.0` in the native module, so every angle is a 2D image-plane angle.
-- No rotation, EXIF, mirror, or resize handling before `lm.detect()`.
-- MediaPipe's own `setMinPoseDetectionConfidence` / `setMinPosePresenceConfidence` / `setMinTrackingConfidence`
-  are not set, so library defaults apply. The app's confidence gate is applied downstream, in JS.
-- The detection loop's `catch` still swallows every error silently (snapshot, decode, native rejection).
-
-Resolved (Phase 1): EMA smoothing, 3-frame transition confirmation, a per-joint visibility floor, and
-per-frame deletion of snapshot temp files.
+- No rotation, EXIF or mirror handling before detection.
+- MediaPipe's own confidence thresholds are left at their defaults; the app's gate runs downstream, in JS.
+- The loop's `catch` swallows every error silently.
+- `z` is hard-coded to `0.0`, so every angle is an image-plane angle.
 
 ---
 

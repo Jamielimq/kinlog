@@ -2,7 +2,7 @@
   "expo": {
     "name": "Kinlog",
     "slug": "kinlog",
-    "version": "1.3.3",
+    "version": "1.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kinlog",
@@ -24,7 +24,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.kinlog.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 9
+      "versionCode": 10
     },
     "web": {
       "output": "static",

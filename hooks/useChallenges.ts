@@ -142,6 +142,49 @@ function deriveEffectiveStatus(
   return 'failed';
 }
 
+/** Every quest in the catalog with this wallet's current run of it, as of `now`. */
+export function questViews(
+  catalog: ChallengeCatalog[],
+  instances: UserChallengeInstance[],
+  now: number,
+): ChallengeView[] {
+  return catalog.map(c => {
+    const forThis = instances.filter(i => i.challengeId === c.id);
+    const instance = pickCurrentInstance(forThis);
+    const effectiveStatus = deriveEffectiveStatus(instance, now);
+    const isStartable =
+      effectiveStatus === 'available' || effectiveStatus === 'failed';
+
+    let progressPct = 0;
+    let daysRemaining: number | null = null;
+    if (instance) {
+      const req = instance.requirementSnapshot.requirementDays;
+      const metCount = Object.values(instance.progress.daysLog ?? {}).filter(
+        d => d.met,
+      ).length;
+      progressPct = req > 0 ? Math.min(1, metCount / req) : 0;
+      daysRemaining = Math.max(0, req - metCount);
+    }
+
+    return { catalog: c, instance, effectiveStatus, isStartable, daysRemaining, progressPct };
+  });
+}
+
+/**
+ * The quests Home shows: a run still going, or done and waiting for its claim; claim-pending first,
+ * then the oldest start (closest to its end). This version starts no new quests, so a claimed,
+ * failed or expired run doesn't show, and with none the Quests section is hidden.
+ */
+export function homeQuests(views: ChallengeView[]): ChallengeView[] {
+  return views
+    .filter(v => v.effectiveStatus === 'active' || v.effectiveStatus === 'completed')
+    .sort((a, b) => {
+      const ra = a.effectiveStatus === 'completed' ? 0 : 1;
+      const rb = b.effectiveStatus === 'completed' ? 0 : 1;
+      return ra !== rb ? ra - rb : (a.instance?.startedAt ?? 0) - (b.instance?.startedAt ?? 0);
+    });
+}
+
 export function useChallenges(address: string | null) {
   const [catalog, setCatalog] = useState<ChallengeCatalog[]>([]);
   const [instances, setInstances] = useState<UserChallengeInstance[]>([]);
@@ -170,11 +213,13 @@ export function useChallenges(address: string | null) {
 
   // User instances
   useEffect(() => {
+    // Nothing from the previous wallet shows, and loading lasts until this one's runs are read.
+    setInstances([]);
     if (!address) {
-      setInstances([]);
       setInstancesLoading(false);
       return;
     }
+    setInstancesLoading(true);
     const db = getFirestore(getApp());
     const ref = collection(db, 'users', address, 'userChallenges');
     const unsubscribe = onSnapshot(ref, (snap: FirebaseFirestoreTypes.QuerySnapshot) => {
@@ -189,29 +234,10 @@ export function useChallenges(address: string | null) {
     return unsubscribe;
   }, [address]);
 
-  const challenges = useMemo<ChallengeView[]>(() => {
-    const now = Date.now();
-    return catalog.map(c => {
-      const forThis = instances.filter(i => i.challengeId === c.id);
-      const instance = pickCurrentInstance(forThis);
-      const effectiveStatus = deriveEffectiveStatus(instance, now);
-      const isStartable =
-        effectiveStatus === 'available' || effectiveStatus === 'failed';
-
-      let progressPct = 0;
-      let daysRemaining: number | null = null;
-      if (instance) {
-        const req = instance.requirementSnapshot.requirementDays;
-        const metCount = Object.values(instance.progress.daysLog ?? {}).filter(
-          d => d.met,
-        ).length;
-        progressPct = req > 0 ? Math.min(1, metCount / req) : 0;
-        daysRemaining = Math.max(0, req - metCount);
-      }
-
-      return { catalog: c, instance, effectiveStatus, isStartable, daysRemaining, progressPct };
-    });
-  }, [catalog, instances]);
+  const challenges = useMemo<ChallengeView[]>(
+    () => questViews(catalog, instances, Date.now()),
+    [catalog, instances],
+  );
 
   return {
     challenges,

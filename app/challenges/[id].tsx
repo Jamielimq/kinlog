@@ -19,7 +19,6 @@ import { localDateKey } from '../../hooks/challengeProgress'
 import { useChallenges } from '../../hooks/useChallenges'
 import { useClaimChallengeReward } from '../../hooks/useClaimChallengeReward'
 import { useGoals } from '../../hooks/useGoals'
-import { useStartChallenge } from '../../hooks/useStartChallenge'
 
 const C = {
   bg: '#FAFAF9', bg2: '#F5F4F1', bg3: '#EDECEA',
@@ -67,7 +66,6 @@ export default function ChallengeDetailScreen() {
 
   const { challenges, loading } = useChallenges(address)
   const { goals } = useGoals(address)
-  const { startChallenge, isStarting } = useStartChallenge()
   const { claimChallengeReward, isClaiming } = useClaimChallengeReward()
 
   const [claimResult, setClaimResult] = useState<{ tx: string; points: number } | null>(null)
@@ -168,15 +166,6 @@ export default function ChallengeDetailScreen() {
   const todayLog = instance?.progress.daysLog?.[localDateKey(Date.now())]
   const todayMet = !!todayLog?.met
 
-  const handleStart = async () => {
-    try {
-      await startChallenge(catalog)
-      // Stay on this screen — onSnapshot will populate the new instance.
-    } catch {
-      // Hook surfaces the error.
-    }
-  }
-
   const handleClaim = async () => {
     try {
       const { txSignature, awardedPoints } = await claimChallengeReward(view)
@@ -191,22 +180,15 @@ export default function ChallengeDetailScreen() {
   }
 
   // ─── Bottom action ───
-  let bottom: { label: string; onPress: () => void; primary: boolean; disabled?: boolean }
+  // This version starts no new quests: a run that isn't going or waiting for its claim (not started,
+  // failed, claimed) has no action here.
+  let bottom: { label: string; onPress: () => void; primary: boolean; disabled?: boolean } | null = null
   if (!publicKey) {
     bottom = { label: connecting ? 'Connecting...' : 'Connect Wallet', onPress: connect, primary: true, disabled: connecting }
-  } else if (!instance) {
-    bottom = { label: isStarting ? 'Starting...' : 'Start Quest', onPress: handleStart, primary: true, disabled: isStarting }
   } else if (status === 'active') {
     bottom = { label: 'Go to Workout →', onPress: () => router.push('/workout'), primary: true }
   } else if (status === 'completed') {
     bottom = { label: isClaiming ? 'Claiming...' : 'Claim Reward →', onPress: handleClaim, primary: true, disabled: isClaiming }
-  } else if (status === 'failed') {
-    bottom = { label: isStarting ? 'Starting...' : 'Try Again', onPress: handleStart, primary: true, disabled: isStarting }
-  } else if (status === 'completed_today') {
-    bottom = { label: 'Available tomorrow', onPress: () => {}, primary: false, disabled: true }
-  } else {
-    // 'available' with prior instance — claimed on a previous calendar day.
-    bottom = { label: isStarting ? 'Starting...' : 'Start Again', onPress: handleStart, primary: false, disabled: isStarting }
   }
 
   return (
@@ -372,7 +354,7 @@ export default function ChallengeDetailScreen() {
             <Text style={s.todayDoneCheck}>✓</Text>
             <Text style={s.todayDoneText}>Today&apos;s goal done</Text>
           </View>
-        ) : (
+        ) : bottom ? (
           <TouchableOpacity
             style={[
               bottom.primary ? s.actionPrimary : s.actionGhost,
@@ -389,7 +371,7 @@ export default function ChallengeDetailScreen() {
               {bottom.label}
             </Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </ScrollView>
 
       {/* Claim success modal */}

@@ -7,7 +7,7 @@ import { HowToSheet } from '../../components/HowToSheet'
 import { LockedInCard } from '../../components/lockedIn/LockedInCard'
 import { SignInGate } from '../../components/SignInGate'
 import { useWallet } from '../../context/WalletContext'
-import { useChallenges, type ChallengeView } from '../../hooks/useChallenges'
+import { homeQuests, useChallenges, type ChallengeView } from '../../hooks/useChallenges'
 import { useGoals } from '../../hooks/useGoals'
 import { useUserStats } from '../../hooks/useUserStats'
 import { dataLoading } from '../../lib/dataLoading'
@@ -36,7 +36,7 @@ export default function HomeScreen() {
   const address = dataAddress
   const { goals, loading: goalsLoading } = useGoals(address)
   const { stats, loading: statsLoading } = useUserStats(address)
-  const { challenges } = useChallenges(address)
+  const { challenges, loading: questsLoading } = useChallenges(address)
   const [showDisconnect, setShowDisconnect] = useState(false)
   const [showHowTo, setShowHowTo] = useState(false)
   // A connected wallet's numbers stay blank until its data is read, before sign-in too, so no 0 shows
@@ -52,15 +52,10 @@ export default function HomeScreen() {
   const formattedPoints = stats.points.toLocaleString()
   const streakDisplay = stats.currentStreak > 0 ? `${stats.currentStreak}d` : '0d'
 
-  // Quests: claim-pending first, then active by start date (oldest = closest to deadline).
-  const inProgressQuests = challenges
-    .filter(c => c.effectiveStatus === 'active' || c.effectiveStatus === 'completed')
-    .sort((a, b) => {
-      const ra = a.effectiveStatus === 'completed' ? 0 : 1
-      const rb = b.effectiveStatus === 'completed' ? 0 : 1
-      if (ra !== rb) return ra - rb
-      return a.instance!.startedAt - b.instance!.startedAt
-    })
+  // Quests: only runs still going or waiting for their claim (this version starts no new ones), and
+  // nothing until the wallet's runs are read.
+  const quests = homeQuests(challenges)
+  const showQuests = !dataLoading(!!publicKey, dataAddress, questsLoading) && quests.length > 0
 
   return (
     // Top edge only: the tab bar already covers the bottom inset, and SafeAreaView measures insets
@@ -151,124 +146,75 @@ export default function HomeScreen() {
         <LockedInCard />
 
         {/* Quests */}
-        {publicKey ? (
+        {showQuests && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Quests</Text>
 
-            {inProgressQuests.length === 0 ? (
-              <TouchableOpacity
-                style={s.questEmpty}
-                onPress={() => router.push('/challenges')}
-                activeOpacity={0.85}
-              >
-                <View style={s.questEmptyIcon}>
-                  <Text style={{ fontSize: 18 }}>🛡</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.questEmptyTitle}>Start your first quest</Text>
-                  <Text style={s.questEmptySub}>Earn verified rewards</Text>
-                </View>
-                <Text style={s.questEmptyArrow}>→</Text>
-              </TouchableOpacity>
-            ) : (
-              inProgressQuests.map((q, idx) => {
-                const stackStyle = { marginBottom: idx < inProgressQuests.length - 1 ? 12 : 0 }
-                if (q.instance!.status === 'completed') {
-                  return (
-                    <TouchableOpacity
-                      key={q.catalog.id}
-                      style={[s.questClaim, stackStyle]}
-                      onPress={() => router.push(`/challenges/${q.catalog.id}`)}
-                      activeOpacity={0.85}
-                    >
-                      <View style={s.questHeadRow}>
-                        <Text style={s.questClaimLabel}>✓ READY TO CLAIM</Text>
-                        <View style={s.questClaimBadge}>
-                          <Text style={s.questClaimBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
-                        </View>
-                      </View>
-                      <Text style={s.questClaimTitle}>{q.catalog.name}</Text>
-                      <Text style={s.questClaimReward}>
-                        Reward: +{q.catalog.bonusPoints} points
-                      </Text>
-                      <View style={s.questClaimCta}>
-                        <Text style={s.questClaimCtaText}>Claim Reward →</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )
-                }
-                const dayIdx = liveDayIndex(q)
+            {quests.map((q, idx) => {
+              const stackStyle = { marginBottom: idx < quests.length - 1 ? 12 : 0 }
+              if (q.instance!.status === 'completed') {
                 return (
                   <TouchableOpacity
                     key={q.catalog.id}
-                    style={stackStyle}
+                    style={[s.questClaim, stackStyle]}
                     onPress={() => router.push(`/challenges/${q.catalog.id}`)}
                     activeOpacity={0.85}
                   >
-                    <LinearGradient
-                      colors={[q.catalog.nft.gradientFrom, q.catalog.nft.gradientTo] as [string, string]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={s.questCard}
-                    >
-                      <View style={s.questCardTopRow}>
-                        <Text style={s.questCardRarity}>{q.catalog.rarity.toUpperCase()}</Text>
-                        <View style={s.questCardBadge}>
-                          <Text style={s.questCardBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
-                        </View>
+                    <View style={s.questHeadRow}>
+                      <Text style={s.questClaimLabel}>✓ READY TO CLAIM</Text>
+                      <View style={s.questClaimBadge}>
+                        <Text style={s.questClaimBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
                       </View>
-                      <Text style={s.questCardTitle}>{q.catalog.name}</Text>
-                      <View style={s.questCardProgressBar}>
-                        <View style={[s.questCardProgressFill, { width: `${q.progressPct * 100}%` }]} />
-                      </View>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                        <Text style={s.questCardProgressNote}>
-                          Day {dayIdx} of {q.catalog.requirementDays}
-                          {q.daysRemaining !== null ? ` · ${q.daysRemaining} days left` : ''}
-                        </Text>
-                        <Text style={s.questCardProgressPct}>{Math.round(q.progressPct * 100)}%</Text>
-                      </View>
-                    </LinearGradient>
+                    </View>
+                    <Text style={s.questClaimTitle}>{q.catalog.name}</Text>
+                    <Text style={s.questClaimReward}>
+                      Reward: +{q.catalog.bonusPoints} points
+                    </Text>
+                    <View style={s.questClaimCta}>
+                      <Text style={s.questClaimCtaText}>Claim Reward →</Text>
+                    </View>
                   </TouchableOpacity>
                 )
-              })
-            )}
-
-            {inProgressQuests.length >= 3 ? (
-              <TouchableOpacity
-                style={s.questMore}
-                onPress={() => router.push('/challenges')}
-                activeOpacity={0.7}
-              >
-                <Text style={s.questMoreText}>+ View all quests →</Text>
-              </TouchableOpacity>
-            ) : inProgressQuests.length >= 1 ? (
-              <TouchableOpacity
-                style={s.questMore}
-                onPress={() => router.push('/challenges')}
-                activeOpacity={0.7}
-              >
-                <Text style={s.questMoreText}>+ Add another quest →</Text>
-              </TouchableOpacity>
-            ) : null}
+              }
+              const dayIdx = liveDayIndex(q)
+              return (
+                <TouchableOpacity
+                  key={q.catalog.id}
+                  style={stackStyle}
+                  onPress={() => router.push(`/challenges/${q.catalog.id}`)}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={[q.catalog.nft.gradientFrom, q.catalog.nft.gradientTo] as [string, string]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={s.questCard}
+                  >
+                    <View style={s.questCardTopRow}>
+                      <Text style={s.questCardRarity}>{q.catalog.rarity.toUpperCase()}</Text>
+                      <View style={s.questCardBadge}>
+                        <Text style={s.questCardBadgeText}>🛡 {q.catalog.nft.romanNumeral}</Text>
+                      </View>
+                    </View>
+                    <Text style={s.questCardTitle}>{q.catalog.name}</Text>
+                    <View style={s.questCardProgressBar}>
+                      <View style={[s.questCardProgressFill, { width: `${q.progressPct * 100}%` }]} />
+                    </View>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={s.questCardProgressNote}>
+                        Day {dayIdx} of {q.catalog.requirementDays}
+                        {q.daysRemaining !== null ? ` · ${q.daysRemaining} days left` : ''}
+                      </Text>
+                      <Text style={s.questCardProgressPct}>{Math.round(q.progressPct * 100)}%</Text>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )
+            })}
           </View>
-        ) : (
-          <TouchableOpacity
-            style={s.questGuestCard}
-            onPress={() => router.push('/challenges')}
-            activeOpacity={0.85}
-          >
-            <View style={s.questGuestIconBox}>
-              <Text style={{ fontSize: 16 }}>🛡</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.questGuestTitle}>View available quests</Text>
-              <Text style={s.questGuestSub}>Connect wallet to start</Text>
-            </View>
-            <Text style={s.questGuestArrow}>→</Text>
-          </TouchableOpacity>
         )}
 
+        <View style={{ height: 12 }}/>
       </ScrollView>
 
       <HowToSheet visible={showHowTo} onClose={() => setShowHowTo(false)} />
@@ -344,12 +290,6 @@ const s = StyleSheet.create({
 
   questHeadRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
 
-  questEmpty:          { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.amberBg, borderRadius: 18, padding: 16, borderWidth: 1.5, borderColor: `${C.amber}33` },
-  questEmptyIcon:      { width: 40, height: 40, borderRadius: 13, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: `${C.amber}33` },
-  questEmptyTitle:     { fontSize: 14, fontWeight: '800', color: C.text, marginBottom: 2 },
-  questEmptySub:       { fontSize: 11, color: C.amber },
-  questEmptyArrow:     { fontSize: 18, color: C.amber, fontWeight: '700' },
-
   questCard:               { borderRadius: 18, padding: 16, overflow: 'hidden' },
   questCardTopRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   questCardRarity:         { fontSize: 9, color: 'rgba(255,255,255,0.85)', letterSpacing: 1.2, fontWeight: '700' },
@@ -369,15 +309,6 @@ const s = StyleSheet.create({
   questClaimReward:    { fontSize: 12, color: `${C.dark}CC`, marginBottom: 14, fontWeight: '600' },
   questClaimCta:       { backgroundColor: C.dark, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   questClaimCtaText:   { color: '#fff', fontSize: 14, fontWeight: '800' },
-
-  questMore:           { paddingVertical: 16, alignItems: 'center' },
-  questMoreText:       { fontSize: 14, color: C.sub, fontWeight: '500' },
-
-  questGuestCard:      { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: C.card, borderRadius: 16, padding: 14, borderWidth: 0.5, borderColor: C.line, marginBottom: 24 },
-  questGuestIconBox:   { width: 36, height: 36, borderRadius: 10, backgroundColor: C.amberBg, alignItems: 'center', justifyContent: 'center' },
-  questGuestTitle:     { fontSize: 15, fontWeight: '500', color: C.text, marginBottom: 2 },
-  questGuestSub:       { fontSize: 12, color: C.sub },
-  questGuestArrow:     { fontSize: 18, color: C.muted, fontWeight: '600' },
 
   modalOverlay:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalBox:            { backgroundColor: C.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 40, alignItems: 'center' },

@@ -144,11 +144,14 @@ export const MONTHLY_BADGES: readonly MonthlyBadge[] = [
   { type: 'sweep', need: 'all', name: 'Full Month', rarity: 'Epic', pts: 300 },
 ];
 
-/** The Badges tab's line for a monthly badge. */
+/**
+ * The Badges tab's line for a monthly badge, as two lines with "in a month." on the second, so the
+ * closing phrase is never split (components/badges/BadgeCard.tsx fits them to the card).
+ */
 export function monthlyDesc(b: MonthlyBadge): string {
-  if (b.need === 'all') return `${DAILY_GOAL} squats every day of a month.`;
-  if (b.need === 1) return `${DAILY_GOAL} squats on any day of a month.`;
-  return `${DAILY_GOAL} squats ${b.need} days in a row in a month.`;
+  if (b.need === 'all') return `${DAILY_GOAL} squats every day\nof a month.`;
+  if (b.need === 1) return `${DAILY_GOAL} squats on any day\nin a month.`;
+  return `${DAILY_GOAL} squats ${b.need} days in a row\nin a month.`;
 }
 
 /** users/{wallet}/badges/<id> for one monthly badge in one month: month_run3_202610. */

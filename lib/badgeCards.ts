@@ -34,7 +34,6 @@ export interface BadgeCard {
   open: ClaimItem[]; // earned, not claimed, not waiting on chain; oldest first, so Claim takes open[0]
   claimIds: string[]; // every record it can be claimed into, to tell whether the claim under way is its own
   state: CardState;
-  earnedAt?: number; // lifetime badges
 }
 
 export interface CardInputs {
@@ -106,7 +105,7 @@ export function buildCards(x: CardInputs): BadgeCard[] {
     .filter(b => b.category !== 'challenge' || b.earned)
     .map(b => {
       const c = toCard(
-        { key: b.id, category: b.category, name: b.name, desc: b.desc, rarity: b.rarity, pts: b.pts, emoji: b.emoji, earnedAt: b.earnedAt },
+        { key: b.id, category: b.category, name: b.name, desc: b.desc, rarity: b.rarity, pts: b.pts, emoji: b.emoji },
         [unitOf(lifetimeClaim(b), b.earned, !!b.mintedAt)],
         x.loading,
       );

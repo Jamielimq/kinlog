@@ -1,24 +1,27 @@
 # Kinlog Architecture Reference
 
-A current-state map of the subsystems that upcoming work touches: squat detection, the 3-Day/7-Day Challenge,
-the daily workout record, badge issuance, SKR staking verification, MWA transaction signing, and licensing.
-Every claim below is a description of code as it exists today, with `file:line` citations so you can jump
-straight to the source instead of re-deriving it.
+A map of the subsystems that upcoming work touches: squat detection, the 3-Day/7-Day Challenge, the daily
+workout record, badge issuance, SKR staking verification, MWA transaction signing, and licensing.
 
-Section 1 matches app version **1.4.0** (`versionCode 10`, `android/app/build.gradle:95-96`): the squat judgement
-as settled in September and October 2026, with the calibration instrumentation removed. The other sections still
-describe 1.3.3 (`versionCode 9`) until they are revised.
-Companion documents: `CLAUDE.md` (working rules and settled product decisions), `README.md` (product overview).
+Only section 1 describes the code as it exists today: app version **1.4.0** (`versionCode 10`,
+`android/app/build.gradle:95-96`), the squat judgement as settled in September and October 2026, with the
+calibration instrumentation removed. Sections 2 to 7 still describe 1.3.3 (`versionCode 9`): their `file:line`
+citations point at the 1.3.3 code and no longer match the current files, so read them as history until they are
+revised.
 
-| Section | Primary files |
-|---|---|
-| [1. Squat detection](#1-squat-detection) | `app/(tabs)/workout.tsx`, `hooks/usePoseLandmarker.ts`, `PoseLandmarkerModule.kt` |
-| [2. Challenge / Quests](#2-3-day--7-day-challenge-quests) | `hooks/useStartChallenge.ts`, `hooks/challengeProgress.ts`, `hooks/useClaimChallengeReward.ts` |
-| [3. Workout record storage](#3-daily-workout-record-storage) | `app/(tabs)/workout.tsx`, `hooks/useGoals.ts`, `context/WalletContext.tsx` |
-| [4. Badge issuance](#4-badge-issuance) | `hooks/useBadges.ts`, `app/(tabs)/badges.tsx` |
-| [5. SKR staking](#5-skr-staking-verification) | `hooks/useSkrStaking.ts` |
-| [6. MWA signing](#6-mwa-transaction-signing) | `context/WalletContext.tsx` |
-| [7. Licensing](#7-license-layout) | `LICENSE`, `docs/terms.html` |
+Companion documents: `CLAUDE.md` (working rules and settled product decisions), `README.md` (product overview), and
+`docs/LOCKED_IN.md` (the 3-Day / 7-Day Challenge of 1.4.0: deposit, daily squats, Square pick and Reward). Section 2
+here is the old quest version, which 1.4.0 no longer lets anyone start.
+
+| Section | Primary files | Describes |
+|---|---|---|
+| [1. Squat detection](#1-squat-detection) | `app/(tabs)/workout.tsx`, `hooks/usePoseLandmarker.ts`, `PoseLandmarkerModule.kt` | 1.4.0 |
+| [2. Challenge / Quests](#2-3-day--7-day-challenge-quests) | `hooks/useStartChallenge.ts`, `hooks/challengeProgress.ts`, `hooks/useClaimChallengeReward.ts` | 1.3.3 |
+| [3. Workout record storage](#3-daily-workout-record-storage) | `app/(tabs)/workout.tsx`, `hooks/useGoals.ts`, `context/WalletContext.tsx` | 1.3.3 |
+| [4. Badge issuance](#4-badge-issuance) | `hooks/useBadges.ts`, `app/(tabs)/badges.tsx` | 1.3.3 |
+| [5. SKR staking](#5-skr-staking-verification) | `hooks/useSkrStaking.ts` | 1.3.3 |
+| [6. MWA signing](#6-mwa-transaction-signing) | `context/WalletContext.tsx` | 1.3.3 |
+| [7. Licensing](#7-license-layout) | `LICENSE`, `docs/terms.html` | 1.3.3 |
 
 ---
 
@@ -42,13 +45,15 @@ The session loop (the detection effect in `workout.tsx`):
 6. `finally` deletes the JPEG. Entering the screen sweeps the directory once, reclaiming files a crashed or
    force-closed session left behind.
 
-The loop's `catch` skips a frame silently on any error (snapshot, decode, native rejection).
+A failed snapshot throws, and the loop's `catch` skips that frame silently. A native rejection (a decode or
+detection error) never reaches it: `detect` turns it into `null`, which the loop treats like a frame with no pose,
+so it is excluded and counts toward the tracking warning.
 
 Before a session, a lighter preview loop (every `PREVIEW_INTERVAL_MS`, 400 ms) applies the same acceptance test to
 drive the Live / Not detected badge and auto start. It touches no judgement state and shares `detectingRef`, so it
 never overlaps a session frame.
 
-### JS bridge — `hooks/usePoseLandmarker.ts`
+### JS bridge: `hooks/usePoseLandmarker.ts`
 
 - `usePoseLandmarker(videoMode)` initializes the native module on mount and releases it on unmount. The workout
   screen passes `POSE_VIDEO_MODE` (`true`).
@@ -56,7 +61,7 @@ never overlaps a session frame.
 - `calcAngle(a, b, c)` is a pure 2D interior angle in degrees, rounded. `z` is ignored.
 - `PoseLandmarks` carries eight joints, each `{ x, y, z, visibility }`: shoulders, hips, knees and ankles.
 
-### Native module — `android/app/src/main/java/com/kinlog/app/PoseLandmarkerModule.kt`
+### Native module: `android/app/src/main/java/com/kinlog/app/PoseLandmarkerModule.kt`
 
 - Module `"PoseLandmarker"`, registered by `PoseLandmarkerPackage` in `MainApplication.kt`. Model asset
   `pose_landmarker_lite.task`, `setNumPoses(1)`, MediaPipe's default detection, presence and tracking confidences.
@@ -70,7 +75,7 @@ never overlaps a session frame.
   angle; `visibility` is MediaPipe's own, `0.0` when absent.
 - Gradle dependency: `com.google.mediapipe:tasks-vision:0.10.14` (`android/app/build.gradle`).
 
-### Judgement — `app/(tabs)/workout.tsx`
+### Judgement: `app/(tabs)/workout.tsx`
 
 **Side view is the only supported capture.** `measureSide` picks the leg with the higher summed hip, knee and ankle
 visibility (a tie goes to the left) and returns its knee angle, its joints, the same-side shoulder when that is at
@@ -138,15 +143,27 @@ Calibration evidence behind the constants (2026-09-22 to 09-24, same device):
 - **`TORSO_MIN`.** Across four clean sets the baseline torso never fell below 0.210; bad frames measured 0.030–0.141.
 - **`ORDER_TOLERANCE`.** The tightest slack at the bottom of a real squat was 0.068 (knee above ankle); scrambled
   frames sat 0.045–0.209 the wrong way.
-- **No smoothing.** At about 4 fps an EMA at 0.4 shrank a real 66–178° swing to 89–155°, leaving 150° barely
-  reachable; a median of 3 kept the amplitude but merged two reps whenever the top lasted one frame; multi-frame
-  confirmation needs 6 or more qualifying frames per rep, while a 2 s rep supplies about 8.6.
+- **`MIN_VISIBILITY`.** On 2026-09-22 (four sessions, 832 frames) accepted frames had a median `minVis` of 0.86 and
+  rejected ones 0.17 (at most 0.50): two separate groups, with 0.5 in the empty gap between them, so lowering the
+  floor to 0.4 would have recovered almost nothing. Rejections clustered while getting into position, not during
+  squats.
+- **No smoothing.** The first sessions on 2026-09-22 ran at about 2.9 fps (frame interval p50 348 ms, avg 315 ms).
+  The same day's speed-up (downscaled decoding, bitmap release, VIDEO mode) brought it to about 4.3 fps (p50 233 ms),
+  where it stayed through 09-24; the filters were dropped on 09-23 at that cadence.
+  - An EMA at 0.4 shrank a real 66–178° swing to 89–155°, leaving the 150° up threshold barely reachable.
+  - A median of 3 kept the amplitude but merged two reps into one whenever the top of a rep lasted a single frame.
+  - Confirming each transition on 3 frames needs 3 frames at 110° or below and 3 at 150° or above in every rep:
+    6 at the extremes. The frames on the way down and back up sit between the two thresholds and count for neither,
+    and the top of a fast rep often lasted one frame. So the frames a 2 s rep supplies (about 5.8 at 2.9 fps, 8.6
+    at 4.3 fps) were mostly in transit: 3 of 10 such reps counted at 2.9 fps, and 1 of 10 at 4.3 fps with the EMA
+    still in place.
 
 ### What the pipeline does not do
 
 - No rotation, EXIF or mirror handling before detection.
 - MediaPipe's own confidence thresholds are left at their defaults; the app's gate runs downstream, in JS.
-- The loop's `catch` swallows every error silently.
+- Errors are not surfaced: a failed snapshot is skipped silently, and a native rejection reads as a frame with no
+  pose.
 - `z` is hard-coded to `0.0`, so every angle is an image-plane angle.
 
 ---
@@ -602,56 +619,3 @@ signature after `signAndSendTransactions`.
 | `assets/images/`, `assets/screenshots/` | No license files. |
 
 No `NOTICE`, `COPYING`, `THIRD_PARTY_LICENSES`, or `licenses/` directory exists anywhere outside `node_modules`.
-
----
-
-## Appendix A: Squat criteria comparison
-
-Target criteria under consideration, against what the code does today.
-
-Target criteria against the code, after Phase 1. The owner (a physical therapist) set the up threshold to
-**150°** on 2026-09-22; the earlier "≥ 160°" target in this table is superseded.
-
-| Item | Target criterion | Current implementation | Difference |
-|---|---|---|---|
-| Down | Knee ≤ 110° **and** hip descent ≥ 20% of torso length (both required) | `ema <= KNEE_DOWN` (110), 3 consecutive frames | **Hip-descent condition still missing** — knee angle is the only signal. Boundary now `≤`. (Planned: Phase 2.) |
-| Up | Knee ≥ 150° | `ema >= KNEE_UP` (150), 3 consecutive frames | Matches. |
-| One rep | Returning from down to up | Same | Matches. |
-| Torso length | Distance from shoulder to hip on the same side | Not computed. The native module returns **only landmarks 23–28**. | Shoulders (11/12) are not returned, so this needs a **native module change**, not a JS-only change. (Planned: Phase 2.) |
-| Baseline | Refreshed while standing, frozen during descent; no baseline ⇒ no counting | None. `setAngle(180)` is UI initialization, not a reference pose. | Entirely new. (Planned: Phase 2.) |
-| Smoothing | EMA 0.4 | `EMA_ALPHA = 0.4`, seeded from the first good frame; reset whenever a frame is excluded. | Matches. |
-| Transition confirmation | 3 consecutive frames | `CONFIRM_FRAMES = 3`, applied in **both** directions. | Matches. |
-| Confidence gate | Exclude low-confidence frames | `MIN_VISIBILITY = 0.5` on the weakest joint of the measured leg; excluded frames reset the EMA and streaks but preserve the phase. | Matches. Provisional value — tune from the `lowvis` share in the session log. |
-| Capture | Side view | Side view only. The front/side toggle was removed; the UI states the requirement instead. | Matches. |
-| Temp files | Not retained | Written to `<cache>/kinlog-snapshots`, deleted per frame, directory swept on screen mount. | Matches. |
-| Daily target | 30 reps | `TARGET = 30` | Matches. |
-
-Two implementation notes for the differing rows:
-
-- **Frame cadence — measured, not assumed.** The loop ticks every 100 ms, but `detectingRef` skips a tick
-  whenever a detection is still in flight, and on a Solana Seeker (release APK, 2026-09-22, four sessions,
-  832 frames) the real cadence is **dt p50 = 348 ms, avg ≈ 315 ms, p95 = 367 ms, max = 400 ms** — about
-  **2.9 fps**, roughly 3.5x slower than the nominal interval. A frame-count rule and a wall-clock rule are
-  therefore very different things here.
-
-  The consequence is a hard sampling budget per rep:
-
-  | Cadence | Slow rep (~4.6 s) | Fast rep (~2.0 s) |
-  |---|---|---|
-  | Frames available at dt ≈ 350 ms | ~13 | ~5.8 |
-
-  `CONFIRM_FRAMES = 3` needs 3 qualifying frames at the bottom **and** 3 at the top, i.e. ≥ 6 frames per rep
-  before any are spent on the descent and ascent. A ~2 s rep does not supply them, so fast reps are
-  arithmetically uncountable at this cadence — measured 3 of 10, against 10 of 10 for slow reps. Lowering
-  `CONFIRM_FRAMES` does not rescue it (replaying the captured frames gives 5 at C=2 and 6 at C=1): the frames
-  do not exist to be confirmed. Raising the sample rate is the only fix that reaches both ends of the range.
-
-- **Confidence floor — measured.** Across the same sessions, accepted frames had median `minVis` 0.86 while
-  rejected ones had median 0.17 (max 0.50), a clean bimodal split rather than borderline thrashing, and
-  rejections clustered in each session's first third (getting into position) rather than during the squat.
-  `MIN_VISIBILITY = 0.5` sits in the empty gap between the two modes; lowering it to 0.4 would recover almost
-  nothing. The 12–24 % `lowvis` share per session is mostly setup time, not lost reps.
-- **Coordinate space.** Landmarks are normalized to the image and `z` is hard-coded to `0.0`
-  (`PoseLandmarkerModule.kt:69`), with `y` increasing downward. Hip descent is therefore a `hip.y` increase in
-  normalized units, and must be scaled by a torso length measured in the same units to be
-  distance-from-camera independent.

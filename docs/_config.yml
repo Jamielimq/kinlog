@@ -1,3 +1,5 @@
 # Jekyll skips folders that start with a dot. Publish .well-known so that
 # https://kinlog.app/.well-known/assetlinks.json (Digital Asset Links) is served.
 include: [".well-known"]
+# Keep the Locked In design document off the site. It stays in the repository.
+exclude: ["LOCKED_IN.md"]

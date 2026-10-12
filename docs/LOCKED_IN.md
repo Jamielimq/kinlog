@@ -1,8 +1,8 @@
 # Locked In
 
 Design reference for **Locked In**, the deposit-backed version of the 3-Day (and later 7-Day) Challenge.
-Built for the Radiants CLOCK IN hackathon (Solana Mobile). This document describes the design being
-implemented on branch `feat/locked-in`; sections are marked **(planned)** until the code lands.
+Built for the Radiants CLOCK IN hackathon (Solana Mobile). The program and server run on mainnet, and the
+app screens shipped in version 1.4.0 (Oct 10, 2026).
 
 Companion documents: `CLAUDE.md` (working rules, settled product decisions), `docs/ARCHITECTURE.md`
 (current-state map of the existing app).
@@ -18,7 +18,7 @@ Companion documents: `CLAUDE.md` (working rules, settled product decisions), `do
 | [5. Reading ORE rounds](#5-reading-ore-rounds) | Board/Round layout, target round, settlement |
 | [6. Keys and blast radius](#6-keys-and-blast-radius) | Roles, what each key can and cannot do |
 | [7. Server](#7-server) | Cloud Functions, Firestore collections, alerts |
-| [8. App](#8-app-planned) | Screens, copy rules, badges |
+| [8. App](#8-app) | Screens, copy rules, badges |
 | [9. ORE staking](#9-ore-staking-optional) | Optional receive-as-stake path |
 | [10. Testing](#10-testing) | Local mainnet-fork strategy and scenarios |
 | [11. Deployment](#11-deployment) | Cost, upgrade authority, key custody |
@@ -249,7 +249,7 @@ Cloud Functions v2 in `functions/` (TypeScript, Node 22) on the Firebase Blaze p
   Thresholds: `functions/src/env.ts`.
 - **Cost controls:** a monthly budget alert and per-function instance caps.
 
-## 8. App (planned)
+## 8. App
 
 ### Screens
 

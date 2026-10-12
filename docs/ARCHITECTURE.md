@@ -589,17 +589,21 @@ provider, no token caching, and a leftover identity from another project; it has
 
 ### `Connection` construction
 
-Each is created inline per operation; there is no shared singleton.
+This table describes the current code (1.4.0), unlike the rest of this section. `lib/solana.ts` sets `RPC_URL`:
+Helius when `EXPO_PUBLIC_HELIUS_API_KEY` is set, otherwise the public mainnet endpoint. `getConnection()` returns
+one shared `Connection` on it. Transactions are sent by the wallet, not through this connection.
 
 | File:line | Endpoint |
 |---|---|
-| `hooks/useSkrStaking.ts:61` | Helius when `EXPO_PUBLIC_HELIUS_API_KEY` is set, else public mainnet (`:6-9`) |
-| `app/(tabs)/badges.tsx:78` | `clusterApiUrl('mainnet-beta')` |
-| `hooks/useStartChallenge.ts:103-106` | `clusterApiUrl('mainnet-beta')` |
-| `hooks/useClaimChallengeReward.ts:99-102` | `clusterApiUrl('mainnet-beta')` |
+| `context/ClaimsContext.tsx:146`, `:244` | `getConnection()` (badge claims) |
+| `app/locked-in/[cohortId].tsx:51`, `:155`, `:210` | `getConnection()` |
+| `app/locked-in/square/[cohortId].tsx:100`, `:148`, `:166` | `getConnection()` |
+| `hooks/useLockedIn.ts:118`, `hooks/useOreRound.ts:24` | `getConnection()` |
+| `hooks/useSkrStaking.ts:57` | `new Connection(RPC_URL)`, the same endpoint |
+| `hooks/useStartChallenge.ts:106-107` | `clusterApiUrl('mainnet-beta')` (old quest start) |
+| `hooks/useClaimChallengeReward.ts:102-103` | `clusterApiUrl('mainnet-beta')` (old quest claim) |
 
-In the three transaction paths the connection is used only for `getLatestBlockhash()`; none of them confirms the
-signature after `signAndSendTransactions`.
+Only the old quest start and claim use the public endpoint directly.
 
 ---
 

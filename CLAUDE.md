@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Kinlog — Expo (bare workflow) React Native fitness dApp targeting **Android / Solana Seeker**. AI-powered squat counting via on-device MediaPipe; achievements stored in Firestore and "minted" by paying SOL on Solana Mainnet. iOS is configured but not the primary target (the pose detector is Android-only).
 
-Tagline: **"Move · Earn · Evolve"**. Built for the MONOLITH Solana Mobile Hackathon 2026, connected to RadiantsDAO. **Currently live on the Solana dApp Store**, Lifestyle category, version 1.3.3 (`versionCode 9`) — bumping these in `android/app/build.gradle` is a release-affecting change.
+Tagline: **"Move · Earn · Evolve"**. Built for the MONOLITH Solana Mobile Hackathon 2026, connected to RadiantsDAO. **Currently live on the Solana dApp Store**, Lifestyle category, version 1.4.0 (`versionCode 10`) — bumping these in `android/app/build.gradle` is a release-affecting change.
 
 Subsystem reference — squat detection, Firestore data model, challenge flow, badge minting, MWA signing, licensing: `docs/ARCHITECTURE.md`.
 
@@ -112,7 +112,7 @@ Both `shares` (UserStake offset 105) and `share_price` (StakeConfig offset 137) 
 
 `EXPO_PUBLIC_HELIUS_API_KEY` is now optional: if set, the hook uses Helius RPC for higher rate limits, otherwise it falls back to `https://api.mainnet-beta.solana.com`. The hook also best-effort `deleteDoc`s the legacy `users/{addr}/cache/skr_staking` document on every run to drain dead data left over from the pre-PDA implementation; the delete is wrapped in its own try/catch so a rules denial or missing doc is silent.
 
-### Locked In (`feat/locked-in`: program and server live on mainnet, app in progress)
+### Locked In (program and server live on mainnet, app shipped in 1.4.0)
 Deposit-backed rework of the 3-Day / 7-Day Challenge: 100 SKR deposit + 0.001 SOL Fee, 30 squats a day, then one pick on a 5×5 board whose tier (Common / Rare / Legendary Square) comes from an ORE mining round, paid in ORE from a program vault. Full design: `docs/LOCKED_IN.md`. Revenue modelling lives in `docs/private/` (gitignored; never commit it).
 - **Day boundary is 15:00 UTC (00:00 KST) for everything Locked In** — on-chain cohort times, server daily totals, app copy. The rest of the app still uses the device's local midnight; don't mix the two.
 - **ORE mining program is `oreV3EG1i9BEgiAJ8b177Z2S2rMarzak4NMv1kULvWv`.** `mineRHF5r6S7HyD9SppBfVMXMavDkJsxwGesEvxZr2A` is the legacy v1 program; don't use it. ORE stake program (post-June-2026): `stakecNP3FpiExZPCgZfqRgumVzi6dNqnfrjwXyTgeH`.
